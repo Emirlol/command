@@ -19,11 +19,14 @@ fn executor_impl(arg_count: usize) -> TokenStream {
 
 	if arg_count == 0 {
 		return quote! {
-			impl<Ctx, Func> Executor<Ctx, ()> for Func
+			impl<Ctx, Func, Er> Executor<Ctx, ()> for Func
 			where
-				Func: Fn(&mut Ctx) -> Result<(), CommandError>,
+				Func: Fn(&mut Ctx) -> Result<(), Er>,
+				Er: std::error::Error + Send + Sync + 'static,
 			{
-				fn run(&self, ctx: &mut Ctx, _stack: ()) -> Result<(), CommandError> {
+				type Error = Er;
+
+				fn run(&self, ctx: &mut Ctx, _stack: ()) -> Result<(), Self::Error> {
 					self(ctx)
 				}
 			}
@@ -33,11 +36,13 @@ fn executor_impl(arg_count: usize) -> TokenStream {
 	let pattern = recursive_tuple(values.iter());
 
 	quote! {
-		impl<Ctx, Func, #(#types),*> Executor<Ctx, #stack> for Func
+		impl<Ctx, Func, #(#types),*, Er> Executor<Ctx, #stack> for Func
 		where
-			Func: Fn(&mut Ctx, #(#types),*) -> Result<(), CommandError>,
+			Func: Fn(&mut Ctx, #(#types),*) -> Result<(), Er>,
+			Er: std::error::Error + Send + Sync + 'static,
 		{
-			fn run(&self, ctx: &mut Ctx, #pattern: #stack) -> Result<(), CommandError> {
+			type Error = Er;
+			fn run(&self, ctx: &mut Ctx, #pattern: #stack) -> Result<(), Self::Error> {
 				self(ctx, #(#values),*)
 			}
 		}

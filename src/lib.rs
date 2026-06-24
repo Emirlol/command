@@ -38,7 +38,7 @@ pub use node::{
 	WithExec,
 };
 
-#[derive(Debug, thiserror::Error, PartialEq, Eq)]
+#[derive(Debug, thiserror::Error)]
 pub enum CommandError {
 	#[error("unknown command '{0}'")]
 	UnknownCommand(String),
@@ -52,4 +52,6 @@ pub enum CommandError {
 	TrailingInput(String),
 	#[error("command execution failed: {0}")]
 	Execution(String),
+	#[error("unknown error: {0:?}")]
+	External(#[from] Box<dyn std::error::Error + Send + Sync>),
 }

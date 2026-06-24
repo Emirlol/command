@@ -1,4 +1,7 @@
-use std::fmt::Display;
+use std::{
+	error::Error,
+	fmt::Display,
+};
 
 use crate::{
 	args::ArgParser,
@@ -80,7 +83,8 @@ pub trait CommandNode<Ctx, Stack> {
 }
 
 pub trait Executor<Ctx, Stack> {
-	fn run(&self, ctx: &mut Ctx, stack: Stack) -> Result<(), CommandError>;
+	type Error: Error + Send + Sync;
+	fn run(&self, ctx: &mut Ctx, stack: Stack) -> Result<(), Self::Error>;
 }
 
 pub struct Root<Children> {
@@ -306,13 +310,14 @@ where
 impl<Ctx, Stack, F> DispatchNode<Ctx, Stack> for Exec<F>
 where
 	F: Executor<Ctx, Stack>,
+	F::Error: Error + Send + Sync + 'static,
 {
 	fn dispatch(&self, ctx: &mut Ctx, input: &mut Input<'_>, stack: Stack) -> Result<(), DispatchError<Stack>> {
 		if let Some(token) = input.remaining_token() {
 			return Err(DispatchError::Fatal(CommandError::TrailingInput(token.to_owned())));
 		}
 
-		self.executor.run(ctx, stack).map_err(DispatchError::Fatal)
+		self.executor.run(ctx, stack).map_err(|e| DispatchError::Fatal(CommandError::External(Box::new(e))))
 	}
 }
 
@@ -362,6 +367,8 @@ internal_macros::impl_executor!();
 
 #[cfg(test)]
 mod tests {
+	use std::assert_matches;
+
 	use super::*;
 	use crate::{
 		BoolParser,
@@ -388,9 +395,9 @@ mod tests {
 		let command = server_command(
 			|ctx: &mut TestCtx| {
 				ctx.calls.push("stop".to_owned());
-				Ok(())
+				Ok::<(), CommandError>(())
 			},
-			|_ctx: &mut TestCtx, _player: String| Ok(()),
+			|_ctx: &mut TestCtx, _player: String| Ok::<(), CommandError>(()),
 		);
 		let mut ctx = TestCtx::default();
 
@@ -401,19 +408,25 @@ mod tests {
 
 	#[test]
 	fn unknown_literals_return_errors() {
-		let command = server_command(|_ctx: &mut TestCtx| Ok(()), |_ctx: &mut TestCtx, _player: String| Ok(()));
+		let command = server_command(|_ctx: &mut TestCtx| Ok::<(), CommandError>(()), |_ctx: &mut TestCtx, _player: String| Ok::<(), CommandError>(()));
 
-		assert_eq!(command.execute(&mut TestCtx::default(), "proxy stop"), Err(CommandError::UnknownCommand("proxy".to_owned())),);
-		assert_eq!(command.execute(&mut TestCtx::default(), "server restart"), Err(CommandError::UnknownCommand("restart".to_owned())),);
+		match command.execute(&mut TestCtx::default(), "proxy stop") {
+			Err(CommandError::UnknownCommand(token)) => assert_eq!(token, "proxy"),
+			_ => panic!("Expected UnknownCommand error"),
+		}
+		match command.execute(&mut TestCtx::default(), "server restart") {
+			Err(CommandError::UnknownCommand(token)) => assert_eq!(token, "restart"),
+			_ => panic!("Expected UnknownCommand error"),
+		}
 	}
 
 	#[test]
 	fn typed_arguments_flow_to_executor_in_source_order() {
 		let command = server_command(
-			|_ctx: &mut TestCtx| Ok(()),
+			|_ctx: &mut TestCtx| Ok::<(), CommandError>(()),
 			|ctx: &mut TestCtx, player: String| {
 				ctx.calls.push(format!("ban:{player}"));
-				Ok(())
+				Ok::<(), CommandError>(())
 			},
 		);
 		let mut ctx = TestCtx::default();
@@ -454,7 +467,7 @@ mod tests {
 		                z: i32| {
 			ctx.calls
 				.push(format!("{a},{b},{c},{d},{e},{f},{g},{h},{i},{j},{k},{l},{m},{n},{o},{p},{q},{r},{s},{t},{u},{v},{w},{x},{y},{z}"));
-			Ok(())
+			Ok::<(), CommandError>(())
 		};
 		let stack = (
 			26,
@@ -482,10 +495,10 @@ mod tests {
 	#[test]
 	fn sibling_branches_restore_cursor() {
 		let command = Root::new(Literal::<"server", _>::new(Choice::new(
-			Literal::<"stop", _>::new(Exec::new(|_ctx: &mut TestCtx| Ok(()))),
+			Literal::<"stop", _>::new(Exec::new(|_ctx: &mut TestCtx| Ok::<(), CommandError>(()))),
 			Literal::<"start", _>::new(Exec::new(|ctx: &mut TestCtx| {
 				ctx.calls.push("start".to_owned());
-				Ok(())
+				Ok::<(), CommandError>(())
 			})),
 		)));
 		let mut ctx = TestCtx::default();
@@ -500,13 +513,13 @@ mod tests {
 		let command = Root::new(Literal::<"server", _>::new(Choice::new(
 			Literal::<"true", _>::new(Exec::new(|ctx: &mut TestCtx| {
 				ctx.calls.push("literal".to_owned());
-				Ok(())
+				Ok::<(), CommandError>(())
 			})),
 			Argument::<"value", _, _>::new(
 				BoolParser,
 				Exec::new(|ctx: &mut TestCtx, value: bool| {
 					ctx.calls.push(format!("argument:{value}"));
-					Ok(())
+					Ok::<(), CommandError>(())
 				}),
 			),
 		)));
@@ -521,7 +534,7 @@ mod tests {
 	fn invalid_argument_after_matching_prefix_is_not_masked() {
 		let command = Root::new(Literal::<"server", _>::new(Literal::<"ban", _>::new(Argument::<"value", _, _>::new(
 			I32Parser,
-			Exec::new(|_ctx: &mut TestCtx, _value: i32| Ok(())),
+			Exec::new(|_ctx: &mut TestCtx, _value: i32| Ok::<(), CommandError>(())),
 		))));
 
 		let err = command.execute(&mut TestCtx::default(), "server ban nope").unwrap_err();
@@ -534,22 +547,25 @@ mod tests {
 
 	#[test]
 	fn input_completion_is_enforced() {
-		let command = server_command(|_ctx: &mut TestCtx| Ok(()), |_ctx: &mut TestCtx, _player: String| Ok(()));
+		let command = server_command(|_ctx: &mut TestCtx| Ok::<(), CommandError>(()), |_ctx: &mut TestCtx, _player: String| Ok::<(), CommandError>(()));
 
-		assert_eq!(command.execute(&mut TestCtx::default(), ""), Err(CommandError::IncompleteCommand),);
-		assert_eq!(command.execute(&mut TestCtx::default(), "server"), Err(CommandError::IncompleteCommand),);
-		assert_eq!(command.execute(&mut TestCtx::default(), "server stop now"), Err(CommandError::TrailingInput("now".to_owned())),);
+		assert_matches!(command.execute(&mut TestCtx::default(), ""), Err(CommandError::IncompleteCommand));
+		assert_matches!(command.execute(&mut TestCtx::default(), "server"), Err(CommandError::IncompleteCommand));
+		match command.execute(&mut TestCtx::default(), "server stop now") {
+			Err(CommandError::TrailingInput(token)) => assert_eq!(token, "now"),
+			_ => panic!("Expected TrailingInput error"),
+		}
 	}
 
 	#[test]
 	fn bool_and_int_parser_errors_include_argument_name() {
 		let bool_command = Root::new(Literal::<"server", _>::new(Argument::<"value", _, _>::new(
 			BoolParser,
-			Exec::new(|_ctx: &mut TestCtx, _value: bool| Ok(())),
+			Exec::new(|_ctx: &mut TestCtx, _value: bool| Ok::<(), CommandError>(())),
 		)));
 		let int_command = Root::new(Literal::<"server", _>::new(Argument::<"value", _, _>::new(
 			I32Parser,
-			Exec::new(|_ctx: &mut TestCtx, _value: i32| Ok(())),
+			Exec::new(|_ctx: &mut TestCtx, _value: i32| Ok::<(), CommandError>(())),
 		)));
 
 		assert!(matches!(
