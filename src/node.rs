@@ -123,6 +123,22 @@ impl<const NAME: &'static str, Children: Default> Default for Literal<NAME, Chil
 	}
 }
 
+pub struct LiteralAliases<const NAMES: &'static [&'static str], Children> {
+	children: Children,
+}
+
+impl<const NAMES: &'static [&'static str], Children> LiteralAliases<NAMES, Children> {
+	pub fn new(children: Children) -> Self {
+		Self { children }
+	}
+}
+
+impl<const NAMES: &'static [&'static str], Children: Default> Default for LiteralAliases<NAMES, Children> {
+	fn default() -> Self {
+		Self::new(Children::default())
+	}
+}
+
 pub struct Argument<const NAME: &'static str, Parser, Children> {
 	parser: Parser,
 	children: Children,
@@ -217,6 +233,24 @@ where
 		let checkpoint = input.checkpoint();
 		match input.next_token() {
 			Some(token) if token == NAME => self.children.dispatch(ctx, input, stack).map_err(DispatchError::into_fatal),
+			Some(token) => {
+				input.restore(checkpoint);
+				Err(DispatchError::Recoverable(CommandError::UnknownCommand(token.to_owned()), stack))
+			}
+			None => Err(DispatchError::Recoverable(CommandError::IncompleteCommand, stack)),
+		}
+	}
+}
+
+impl<Ctx, Stack, const NAMES: &'static [&'static str], Children> DispatchNode<Ctx, Stack> for LiteralAliases<NAMES, Children>
+where
+	Children: DispatchNode<Ctx, Stack>,
+{
+	fn dispatch(&self, ctx: &mut Ctx, input: &mut Input<'_>, stack: Stack) -> Result<(), DispatchError<Stack>> {
+		let checkpoint = input.checkpoint();
+
+		match input.next_token() {
+			Some(token) if NAMES.iter().any(|name| token == *name) => self.children.dispatch(ctx, input, stack).map_err(DispatchError::into_fatal),
 			Some(token) => {
 				input.restore(checkpoint);
 				Err(DispatchError::Recoverable(CommandError::UnknownCommand(token.to_owned()), stack))

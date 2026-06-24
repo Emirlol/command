@@ -15,6 +15,7 @@ use syn::{
 	token::Colon,
 	LitStr,
 };
+use syn::token::Or;
 
 mod kw {
 	use syn::custom_keyword;
@@ -55,19 +56,21 @@ struct CommandTree {
 impl CommandTree {
 	fn validate_nodes(&self, input: &ParseStream) -> syn::Result<()> {
 		if self.root_nodes.iter().all(|node| matches!(node, CommandNode::Literal { .. })) {
-			let mut names = std::collections::HashSet::new();
+			let mut seen_names = std::collections::HashSet::new();
 			for node in &self.root_nodes {
-				if let CommandNode::Literal { name, .. } = node {
-					if !names.insert(name.value()) {
-						return Err(syn::Error::new_spanned(name, "Duplicate literal name"));
+				if let CommandNode::Literal { names, .. } = node {
+					for name in names {
+						if !seen_names.insert(name.value()) {
+							return Err(syn::Error::new_spanned(name, "Duplicate literal name"));
+						}
 					}
 				}
 			}
 		} else if self.root_nodes.iter().all(|node| matches!(node, CommandNode::Argument { .. })) {
-			let mut names = std::collections::HashSet::new();
+			let mut seen_names = std::collections::HashSet::new();
 			for node in &self.root_nodes {
 				if let CommandNode::Argument { name, .. } = node {
-					if !names.insert(name.value()) {
+					if !seen_names.insert(name.value()) {
 						return Err(syn::Error::new_spanned(name, "Duplicate argument name"));
 					}
 				}
@@ -127,7 +130,7 @@ impl ToTokens for CommandTree {
 // region CommandNode
 enum CommandNode {
 	Literal {
-		name: LitStr,
+		names: Vec<LitStr>,
 		children: CommandTree,
 		executor: Option<Executor>,
 	},
@@ -143,7 +146,14 @@ impl Parse for CommandNode {
 	fn parse(input: ParseStream) -> syn::Result<Self> {
 		if input.peek(kw::literal) {
 			let _literal: kw::literal = input.parse()?;
-			let name: LitStr = input.parse()?;
+			let mut names: Vec<LitStr> = Vec::new();
+			names.push(input.parse()?); // Enforces at least one name
+
+			while input.peek(Or) && input.peek2(LitStr) {
+				let _or: Or = input.parse()?;
+				names.push(input.parse()?);
+			}
+
 			let mut executor: Option<Executor> = None;
 			let mut children: Vec<CommandNode> = Vec::new();
 			if input.peek(kw::executes) {
@@ -173,7 +183,7 @@ impl Parse for CommandNode {
 			let children = CommandTree { root_nodes: children };
 			children.validate_nodes(&input)?;
 
-			Ok(CommandNode::Literal { name, children, executor })
+			Ok(CommandNode::Literal { names, children, executor })
 		} else if input.peek(kw::argument) {
 			let _argument: kw::argument = input.parse()?;
 			let name: LitStr = input.parse()?;
@@ -224,14 +234,22 @@ impl ToTokens for CommandNode {
 	fn to_tokens(&self, tokens: &mut TokenStream) {
 		let crate_path = crate_path();
 		let node_tokens = match self {
-			CommandNode::Literal { name, children, executor } => {
+			CommandNode::Literal { names, children, executor } => {
+				let ty = match names.len() {
+					0 => unreachable!("Literal node must have at least one name"),
+					1 => {
+						let name = &names[0];
+						quote! { #crate_path::Literal::<#name, _> }
+					}
+					_ => quote! { #crate_path::LiteralAliases::<{ &[#(#names),*] }, _>},
+				};
 				match executor {
 					Some(executor) => match children.root_nodes.len() {
-						0 => quote! { #crate_path::Literal::<#name, _>::new(#executor) },
-						_ => quote! { #crate_path::Literal::<#name, _>::new(#crate_path::WithExec::new(#children, #executor)) },
+						0 => quote! { #ty::new(#executor) },
+						_ => quote! { #ty::new(#crate_path::WithExec::new(#children, #executor)) },
 					},
 					// `children` is guaranteed to be more than 0 if `executor` is None via parse-time validation, so this is safe
-					None => quote! { #crate_path::Literal::<#name, _>::new(#children) },
+					None => quote! { #ty::new(#children) },
 				}
 			}
 			CommandNode::Argument {
@@ -265,7 +283,7 @@ impl Parse for Executor {
 	fn parse(input: ParseStream) -> syn::Result<Self> {
 		let _executes: kw::executes = input.parse()?;
 		// Function name or closure start
-		if input.peek(syn::Ident) || input.peek(syn::token::Or) || input.peek(syn::token::Move) || input.peek(syn::token::Async) {
+		if input.peek(syn::Ident) || input.peek(Or) || input.peek(syn::token::Move) || input.peek(syn::token::Async) {
 			let expr = input.parse()?;
 			Ok(Executor { expr })
 		} else {
