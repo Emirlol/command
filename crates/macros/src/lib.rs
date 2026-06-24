@@ -1,5 +1,7 @@
 use proc_macro2::TokenStream;
+use proc_macro_crate::crate_name;
 use quote::{
+	format_ident,
 	quote,
 	ToTokens,
 };
@@ -22,11 +24,24 @@ mod kw {
 	custom_keyword!(executes);
 }
 
+const MAIN_CRATE_NAME: &str = "command";
+
+fn crate_path() -> TokenStream {
+	match crate_name(MAIN_CRATE_NAME).expect("Could not find crate") {
+		proc_macro_crate::FoundCrate::Itself => quote!(crate),
+		proc_macro_crate::FoundCrate::Name(name) => {
+			let ident = format_ident!("{name}");
+			quote!(::#ident)
+		}
+	}
+}
+
 #[proc_macro]
 pub fn command(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
 	let tree = parse_macro_input!(input as CommandTree);
+	let crate_path = crate_path();
 	quote! {
-		Root::new(#tree)
+		#crate_path::Root::new(#tree)
 	}
 	.into_token_stream()
 	.into()
@@ -87,8 +102,9 @@ impl ToTokens for CommandTree {
 	fn to_tokens(&self, tokens: &mut TokenStream) {
 		let CommandTree { root_nodes } = self;
 		let len = root_nodes.len();
+		let crate_path = crate_path();
 		if len == 0 {
-			tokens.extend(quote!(Nil));
+			tokens.extend(quote!(#crate_path::Nil));
 		} else if len == 1 {
 			let node = &root_nodes[0];
 			tokens.extend(node.to_token_stream());
@@ -98,7 +114,7 @@ impl ToTokens for CommandTree {
 			let mut acc = nodes.pop().unwrap(); // Safe since we're above len == 1
 			while let Some(node) = nodes.pop() {
 				acc = quote! {
-					Choice::new(#node, #acc)
+					#crate_path::Choice::new(#node, #acc)
 				};
 			}
 
@@ -206,15 +222,16 @@ impl Parse for CommandNode {
 
 impl ToTokens for CommandNode {
 	fn to_tokens(&self, tokens: &mut TokenStream) {
+		let crate_path = crate_path();
 		let node_tokens = match self {
 			CommandNode::Literal { name, children, executor } => {
 				match executor {
 					Some(executor) => match children.root_nodes.len() {
-						0 => quote! { Literal::<#name, _>::new(#executor) },
-						_ => quote! { Literal::<#name, _>::new(WithExec::new(#children, #executor)) },
+						0 => quote! { #crate_path::Literal::<#name, _>::new(#executor) },
+						_ => quote! { #crate_path::Literal::<#name, _>::new(#crate_path::WithExec::new(#children, #executor)) },
 					},
 					// `children` is guaranteed to be more than 0 if `executor` is None via parse-time validation, so this is safe
-					None => quote! { Literal::<#name, _>::new(#children) },
+					None => quote! { #crate_path::Literal::<#name, _>::new(#children) },
 				}
 			}
 			CommandNode::Argument {
@@ -225,11 +242,11 @@ impl ToTokens for CommandNode {
 			} => {
 				match executor {
 					Some(executor) => match children.root_nodes.len() {
-						0 => quote! { Argument::<#name, #parser_type, _>::new(<#parser_type as Default>::default(), #executor) },
-						_ => quote! { Argument::<#name, #parser_type, _>::new(<#parser_type as Default>::default(), WithExec::new(#children, #executor)) },
+						0 => quote! { #crate_path::Argument::<#name, #parser_type, _>::new(<#parser_type as Default>::default(), #executor) },
+						_ => quote! { #crate_path::Argument::<#name, #parser_type, _>::new(<#parser_type as Default>::default(), #crate_path::WithExec::new(#children, #executor)) },
 					},
 					// `children` is guaranteed to be more than 0 if `executor` is None via parse-time validation, so this is safe
-					None => quote! { Argument::<#name, #parser_type, _>::new(<#parser_type as Default>::default(), #children) },
+					None => quote! { #crate_path::Argument::<#name, #parser_type, _>::new(<#parser_type as Default>::default(), #children) },
 				}
 			}
 		};
@@ -260,8 +277,9 @@ impl Parse for Executor {
 impl ToTokens for Executor {
 	fn to_tokens(&self, tokens: &mut TokenStream) {
 		let Executor { expr } = self;
+		let crate_path = crate_path();
 		tokens.extend(quote! {
-			Exec::new(#expr)
+			#crate_path::Exec::new(#expr)
 		});
 	}
 }
