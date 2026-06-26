@@ -2,7 +2,7 @@
 #![allow(incomplete_features)]
 #![feature(unsized_const_params)]
 
-//! Static typed command tree
+//! Statically-typed command tree
 
 mod args;
 mod node;

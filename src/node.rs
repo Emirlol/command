@@ -20,15 +20,15 @@ pub struct Input<'a> {
 }
 
 impl<'a> Input<'a> {
-	pub fn new(source: &'a str) -> Self {
+	pub const fn new(source: &'a str) -> Self {
 		Self { source, offset: 0 }
 	}
 
-	pub fn checkpoint(&self) -> Checkpoint {
+	pub const fn checkpoint(&self) -> Checkpoint {
 		Checkpoint { offset: self.offset }
 	}
 
-	pub fn restore(&mut self, checkpoint: Checkpoint) {
+	pub const fn restore(&mut self, checkpoint: Checkpoint) {
 		self.offset = checkpoint.offset;
 	}
 
@@ -92,7 +92,7 @@ pub struct Root<Children> {
 }
 
 impl<Children> Root<Children> {
-	pub fn new(children: Children) -> Self {
+	pub const fn new(children: Children) -> Self {
 		Self { children }
 	}
 
@@ -116,7 +116,7 @@ pub struct Literal<const NAME: &'static str, Children> {
 }
 
 impl<const NAME: &'static str, Children> Literal<NAME, Children> {
-	pub fn new(children: Children) -> Self {
+	pub const fn new(children: Children) -> Self {
 		Self { children }
 	}
 }
@@ -132,7 +132,7 @@ pub struct LiteralAliases<const NAMES: &'static [&'static str], Children> {
 }
 
 impl<const NAMES: &'static [&'static str], Children> LiteralAliases<NAMES, Children> {
-	pub fn new(children: Children) -> Self {
+	pub const fn new(children: Children) -> Self {
 		Self { children }
 	}
 }
@@ -149,7 +149,7 @@ pub struct Argument<const NAME: &'static str, Parser, Children> {
 }
 
 impl<const NAME: &'static str, Parser, Children> Argument<NAME, Parser, Children> {
-	pub fn new(parser: Parser, children: Children) -> Self {
+	pub const fn new(parser: Parser, children: Children) -> Self {
 		Self { parser, children }
 	}
 }
@@ -165,7 +165,7 @@ pub struct Exec<F> {
 }
 
 impl<F> Exec<F> {
-	pub fn new(executor: F) -> Self {
+	pub const fn new(executor: F) -> Self {
 		Self { executor }
 	}
 }
@@ -182,7 +182,7 @@ pub struct WithExec<Node, F> {
 }
 
 impl<Node, F> WithExec<Node, F> {
-	pub fn new(node: Node, executor: F) -> Self {
+	pub const fn new(node: Node, executor: F) -> Self {
 		Self { node, executor }
 	}
 }
@@ -197,7 +197,7 @@ pub struct Choice<Head, Tail> {
 }
 
 impl<Head, Tail> Choice<Head, Tail> {
-	pub fn new(head: Head, tail: Tail) -> Self {
+	pub const fn new(head: Head, tail: Tail) -> Self {
 		Self { head, tail }
 	}
 }
