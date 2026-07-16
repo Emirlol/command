@@ -8,6 +8,8 @@ pub enum ParseError {
 	ParseFloatError(#[from] std::num::ParseFloatError),
 	#[error("expected 'true' or 'false', got '{0}'")]
 	InvalidBool(String),
+	#[error("invalid value: {0}")]
+	InvalidValue(String),
 }
 
 pub trait ArgParser {

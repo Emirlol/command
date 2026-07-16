@@ -28,3 +28,11 @@ edition.workspace = true
 macros.workspace = true
 internal-macros.workspace = true
 thiserror.workspace = true
+
+[[example]]
+name = "basics"
+path = "examples/basics.rs"
+
+[[example]]
+name = "context"
+path = "examples/advanced.rs"

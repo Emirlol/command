@@ -1,8 +1,7 @@
-#![feature(adt_const_params)]
 #![allow(incomplete_features)]
-#![feature(unsized_const_params)]
+#![feature(adt_const_params, unsized_const_params)]
 
-//! Statically-typed command tree
+//! Statically-typed command tree library.
 
 mod args;
 mod node;

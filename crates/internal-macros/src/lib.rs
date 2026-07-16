@@ -26,6 +26,7 @@ fn executor_impl(arg_count: usize) -> TokenStream {
 			{
 				type Error = Er;
 
+				#[inline(always)]
 				fn run(&self, ctx: &mut Ctx, _stack: ()) -> Result<(), Self::Error> {
 					self(ctx)
 				}
@@ -42,6 +43,8 @@ fn executor_impl(arg_count: usize) -> TokenStream {
 			Er: std::error::Error + Send + Sync + 'static,
 		{
 			type Error = Er;
+
+			#[inline(always)]
 			fn run(&self, ctx: &mut Ctx, #pattern: #stack) -> Result<(), Self::Error> {
 				self(ctx, #(#values),*)
 			}
