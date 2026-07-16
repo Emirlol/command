@@ -2,14 +2,44 @@ use std::{
 	assert_matches,
 	convert::Infallible,
 };
-use command::{StringParser, CommandError};
-use macros::command;
 
 // These imports are normally not required, but since the example is within the same project as the main lib, the macro impl generates crate:: prefixed paths which break in this example
-use command::{Choice, Exec, Literal, Root, Argument, WithExec};
+use command::{
+	Argument,
+	Choice,
+	Exec,
+	Literal,
+	Root,
+	WithExec,
+};
+
+
+use command::{
+	CommandError,
+	StringParser,
+};
+use macros::command;
 
 fn main() {
-	let command = command! {
+	let command/*: Root<
+		Choice<
+			Literal<"hello", WithExec<Argument<"name", StringParser, Exec<fn(&mut (), String) -> Result<(), Infallible>>>, Exec<fn(&mut ()) -> Result<(), Infallible>>>>,
+			Choice<
+				Literal<"hello2", Argument<"name", StringParser, Exec<fn(&mut (), String) -> Result<(), Infallible>>>>,
+				Literal<
+					"test",
+					Argument<
+						"arg1",
+						StringParser,
+						WithExec<
+							Argument<"arg2", StringParser, Argument<"arg3", StringParser, Exec<fn(&mut (), String, String, String) -> Result<(), Infallible>>>>,
+							Exec<fn(&mut (), String) -> Result<(), Infallible>>,
+						>,
+					>,
+				>,
+			>,
+		>,
+	>*/ = command! {
 		literal "hello" {
 			// Executors can be defined inline for leaf nodes, without requiring a new scope
 			argument "name": StringParser executes |_: &mut (), name: String| {
