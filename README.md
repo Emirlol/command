@@ -4,7 +4,7 @@ This library is meant for command trees that will be fully defined at compile ti
 
 ## How It Works
 
-Every node in the tree is defined with a type, starting from `Root`:
+Every node in the tree is defined using the type system, starting from `Root`:
 
 ```rust
 let command: Root<
@@ -30,9 +30,16 @@ let command: Root<
 
 (This is the type for the [basics.rs](./examples/basics.rs) example.)
 
+`Literal` nodes are for literal string matches, and `Argument` nodes are for parsing arguments with a parser type. The `Exec` type is used to define the executor function for a node, which will be called when the command tree is executed and the node is reached.
+`WithExec` is used in a node that has both an executor and children. `Choice` is used to define sibling nodes, where first, the former node is tried, and if it fails, the latter node is tried. The `Root` node is the root of the tree, and is used to execute the command tree.
+
+Strictly speaking, executors are child nodes of the node they are defined in, but they are not part of the tree structure and are not considered when parsing inputs. They are only called when the node is reached during execution.
+
+---
+
 Naturally, this is very verbose and does not help much. The tree is intended to be generated with the `command!` macro, which will create the tree for you and you can store the tree in a variable by relying on type inference.
 
-The type is only needed if you want to use it as a generic parameter, or need to store the command tree as a `const` variable. 
+The type is only needed if you want to use it as a generic parameter, or need to store the command tree as a `const` variable (in which case, you'll also need the `const` feature). 
 
 If you *do* need to do one of these, use your IDE to check the type and just copy it from there (and optionally type-alias it to something more suitable), as there doesn't seem to be an intended way to get/build macro outputs' types otherwise.
 
@@ -94,3 +101,7 @@ There are a few rules to the macro:
 
 ## Examples
 Example command tree definitions can be found in [examples](./examples).
+
+## Features
+- `const`:
+  Enabling this allows the `command!` macro to return a const-assignable value. The command tree evaluation still happens at runtime, but the tree itself can be stored in a `const` variable. The only addition required to make this is to implement (or derive) `ConstDefault` on the relevant `ArgParser` types.

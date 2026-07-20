@@ -5,6 +5,7 @@ use quote::{
 	quote,
 	ToTokens,
 };
+use syn::token::Or;
 use syn::{
 	braced,
 	parse::{
@@ -15,7 +16,6 @@ use syn::{
 	token::Colon,
 	LitStr,
 };
-use syn::token::Or;
 
 mod kw {
 	use syn::custom_keyword;
@@ -44,8 +44,8 @@ pub fn command(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
 	quote! {
 		#crate_path::Root::new(#tree)
 	}
-	.into_token_stream()
-	.into()
+		.into_token_stream()
+		.into()
 }
 
 // region CommandTree
@@ -258,13 +258,18 @@ impl ToTokens for CommandNode {
 				children,
 				executor,
 			} => {
+				let parser_default = if cfg!(feature = "const") {
+					quote! { <#parser_type as const_default::ConstDefault>::DEFAULT }
+				} else {
+					quote! { <#parser_type as Default>::default() }
+				};
 				match executor {
 					Some(executor) => match children.root_nodes.len() {
-						0 => quote! { #crate_path::Argument::<#name, #parser_type, _>::new(<#parser_type as Default>::default(), #executor) },
-						_ => quote! { #crate_path::Argument::<#name, #parser_type, _>::new(<#parser_type as Default>::default(), #crate_path::WithExec::new(#children, #executor)) },
+						0 => quote! { #crate_path::Argument::<#name, #parser_type, _>::new(#parser_default, #executor) },
+						_ => quote! { #crate_path::Argument::<#name, #parser_type, _>::new(#parser_default, #crate_path::WithExec::new(#children, #executor)) },
 					},
 					// `children` is guaranteed to be more than 0 if `executor` is None via parse-time validation, so this is safe
-					None => quote! { #crate_path::Argument::<#name, #parser_type, _>::new(<#parser_type as Default>::default(), #children) },
+					None => quote! { #crate_path::Argument::<#name, #parser_type, _>::new(#parser_default, #children) },
 				}
 			}
 		};

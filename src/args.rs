@@ -1,5 +1,8 @@
 use std::convert::Infallible;
 
+#[cfg(feature = "const")]
+use const_default::ConstDefault;
+
 #[derive(Debug, thiserror::Error)]
 pub enum ParseError {
 	#[error("failed to parse integer: {0}")]
@@ -19,7 +22,8 @@ pub trait ArgParser {
 	fn parse(&self, input: &str) -> Result<Self::Output, Self::Error>;
 }
 
-#[derive(Default)]
+#[cfg_attr(not(feature = "const"), derive(Default))]
+#[cfg_attr(feature = "const", derive(ConstDefault))]
 pub struct StringParser;
 
 impl ArgParser for StringParser {
@@ -34,7 +38,8 @@ impl ArgParser for StringParser {
 macro_rules! impl_int_parser {
     ($($ty:ty => $name:ident),* $(,)?) => {
         $(
-            #[derive(Default)]
+            #[cfg_attr(not(feature = "const"), derive(Default))]
+			#[cfg_attr(feature = "const", derive(ConstDefault))]
             pub struct $name;
 
             impl ArgParser for $name {
@@ -63,7 +68,8 @@ impl_int_parser!(
 macro_rules! impl_float_parser {
     ($($ty:ty => $name:ident),* $(,)?) => {
         $(
-            #[derive(Default)]
+            #[cfg_attr(not(feature = "const"), derive(Default))]
+			#[cfg_attr(feature = "const", derive(ConstDefault))]
             pub struct $name;
 
             impl ArgParser for $name {
@@ -83,7 +89,8 @@ impl_float_parser!(
 	f64 => F64Parser,
 );
 
-#[derive(Default)]
+#[cfg_attr(not(feature = "const"), derive(Default))]
+#[cfg_attr(feature = "const", derive(ConstDefault))]
 pub struct BoolParser;
 
 impl ArgParser for BoolParser {
