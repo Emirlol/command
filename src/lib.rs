@@ -6,6 +6,12 @@
 mod args;
 mod node;
 
+// Re-export for the macro to work without requiring the dependency on the consumer crates
+#[cfg(feature = "const")]
+pub mod const_default {
+	pub use const_default::ConstDefault;
+}
+
 pub use args::{
 	ArgParser,
 	BoolParser,

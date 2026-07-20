@@ -259,7 +259,7 @@ impl ToTokens for CommandNode {
 				executor,
 			} => {
 				let parser_default = if cfg!(feature = "const") {
-					quote! { <#parser_type as const_default::ConstDefault>::DEFAULT }
+					quote! { <#parser_type as #crate_path::const_default::ConstDefault>::DEFAULT }
 				} else {
 					quote! { <#parser_type as Default>::default() }
 				};
