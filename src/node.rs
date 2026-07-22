@@ -5,7 +5,11 @@ use std::{
 
 use crate::{
 	args::ArgParser,
-	CommandError,
+	error::{
+		CommandError,
+		DispatchError,
+		IntoDispatchError,
+	},
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -208,11 +212,6 @@ impl<Head: Default, Tail: Default> Default for Choice<Head, Tail> {
 	}
 }
 
-enum DispatchError<Stack> {
-	Recoverable(CommandError, Stack),
-	Fatal(CommandError),
-}
-
 trait DispatchNode<Ctx, Stack> {
 	fn dispatch(&self, ctx: &mut Ctx, input: &mut Input<'_>, stack: Stack) -> Result<(), DispatchError<Stack>>;
 }
@@ -310,14 +309,14 @@ where
 impl<Ctx, Stack, F> DispatchNode<Ctx, Stack> for Exec<F>
 where
 	F: Executor<Ctx, Stack>,
-	F::Error: Error + Send + Sync + 'static,
+	F::Error: IntoDispatchError,
 {
 	fn dispatch(&self, ctx: &mut Ctx, input: &mut Input<'_>, stack: Stack) -> Result<(), DispatchError<Stack>> {
 		if let Some(token) = input.remaining_token() {
 			return Err(DispatchError::Fatal(CommandError::TrailingInput(token.to_owned())));
 		}
 
-		self.executor.run(ctx, stack).map_err(|e| DispatchError::Fatal(CommandError::External(Box::new(e))))
+		self.executor.run(ctx, stack).map_err(IntoDispatchError::into_fatal) // IntoDispatchError has a specialization for CommandError to not box it again
 	}
 }
 
@@ -350,12 +349,14 @@ where
 }
 
 impl<Stack> DispatchError<Stack> {
+	#[inline(always)]
 	fn into_fatal(self) -> DispatchError<Stack> {
 		match self {
 			Self::Recoverable(error, _) | Self::Fatal(error) => DispatchError::Fatal(error),
 		}
 	}
 
+	#[inline(always)]
 	fn into_fatal_for_parent<ParentStack>(self) -> DispatchError<ParentStack> {
 		match self {
 			Self::Recoverable(error, _) | Self::Fatal(error) => DispatchError::Fatal(error),

@@ -1,10 +1,10 @@
 #![allow(incomplete_features)]
-#![feature(adt_const_params, unsized_const_params)]
-
+#![feature(adt_const_params, unsized_const_params, min_specialization)]
 //! Statically-typed command tree library.
 
 mod args;
 mod node;
+mod error;
 
 // Re-export for the macro to work without requiring the dependency on the consumer crates
 #[cfg(feature = "const")]
@@ -42,21 +42,4 @@ pub use node::{
 	Root,
 	WithExec,
 };
-
-#[derive(Debug, thiserror::Error)]
-pub enum CommandError {
-	#[error("unknown command '{0}'")]
-	UnknownCommand(String),
-	#[error("unknown argument '{0}'")]
-	UnknownArgument(String),
-	#[error("invalid argument '{name}' with value '{value}': {reason}")]
-	InvalidArgument { name: &'static str, value: String, reason: String },
-	#[error("incomplete command")]
-	IncompleteCommand,
-	#[error("trailing input '{0}'")]
-	TrailingInput(String),
-	#[error("command execution failed: {0}")]
-	Execution(String),
-	#[error("unknown error: {0:?}")]
-	External(#[from] Box<dyn std::error::Error + Send + Sync>),
-}
+pub use error::CommandError;

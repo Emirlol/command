@@ -1,22 +1,39 @@
-use std::assert_matches;
-use std::sync::mpsc::Sender;
-use command::{StringParser, ArgParser, ParseError};
-use macros::command;
+use std::{
+	assert_matches,
+	sync::mpsc::Sender,
+};
 
 // These imports are normally not required, but since the example is within the same project as the main lib, the macro impl generates crate:: prefixed paths which break in this example
-use command::{Choice, Exec, Literal, Root, Argument, WithExec};
+use command::{
+	ArgParser,
+	BoolParser,
+	CommandError,
+	ParseError,
+	StringParser,
+	command_error,
+};
+// These imports are normally not required, but since the example is within the same project as the main lib, the macro impl generates crate:: prefixed paths which break in this example
+use command::{
+	Argument,
+	Choice,
+	Exec,
+	Literal,
+	Root,
+	WithExec,
+};
+use macros::command;
 
 #[derive(Debug)]
 struct Ban {
 	name: String,
-	reason: BanReason
+	reason: BanReason,
 }
 
 #[derive(Default, Debug)]
 enum BanReason {
 	#[default]
 	Nothing,
-	AbsolutelyNothing
+	AbsolutelyNothing,
 }
 
 // Parsers can be defined for other types besides the primitive types, this is useful for complex types you want to be able to parse from the command line.
@@ -38,7 +55,7 @@ impl ArgParser for BanReasonParser {
 
 fn main() {
 	let (mut tx, rx) = std::sync::mpsc::channel::<Ban>();
-	
+
 	let command = command! {
 		literal "ban" {
 			// Executors can be defined inline for leaf nodes, without requiring a new scope
@@ -46,6 +63,15 @@ fn main() {
 				argument "reason": BanReasonParser executes |tx: &mut Sender<Ban>, name: String, reason: BanReason| tx.send(Ban { name, reason })
 
 				executes |tx: &mut Sender<Ban>, name: String| tx.send(Ban { name, reason: BanReason::default() })
+			}
+		}
+		literal "error" {
+			argument "should": BoolParser executes |_: &mut Sender<Ban>, should: bool| {
+				if should {
+					command_error!("This is an error")
+				} else {
+					Ok(())
+				}
 			}
 		}
 	};
@@ -56,4 +82,6 @@ fn main() {
 	assert_matches!(command.execute(&mut tx, "ban you absolutely_nothing"), Ok(()));
 	assert_matches!(rx.recv(), Ok(Ban { name, reason }) if name == "you" && matches!(reason, BanReason::Nothing));
 	assert_matches!(rx.recv(), Ok(Ban { name, reason }) if name == "you" && matches!(reason, BanReason::AbsolutelyNothing));
+	assert_matches!(command.execute(&mut tx, "error true"), Err(CommandError::Execution(msg)) if msg == "This is an error");
+	assert_matches!(command.execute(&mut tx, "error false"), Ok(()));
 }
