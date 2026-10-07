@@ -3,8 +3,9 @@
 //! Statically-typed command tree library.
 
 mod args;
-mod node;
 mod error;
+mod input;
+mod node;
 
 // Re-export for the macro to work without requiring the dependency on the consumer crates
 #[cfg(feature = "const")]
@@ -17,16 +18,26 @@ pub use args::{
 	BoolParser,
 	F32Parser,
 	F64Parser,
+	I8Parser,
 	I16Parser,
 	I32Parser,
 	I64Parser,
-	I8Parser,
 	ParseError,
 	StringParser,
+	U8Parser,
 	U16Parser,
 	U32Parser,
 	U64Parser,
-	U8Parser,
+};
+pub use error::{
+	CommandError,
+	InputError,
+};
+pub use input::{
+	Checkpoint,
+	Input,
+	InputSource,
+	IntoInputSource,
 };
 pub use macros::command;
 pub use node::{
@@ -35,11 +46,9 @@ pub use node::{
 	CommandNode,
 	Exec,
 	Executor,
-	Input,
 	Literal,
 	LiteralAliases,
 	Nil,
 	Root,
 	WithExec,
 };
-pub use error::CommandError;

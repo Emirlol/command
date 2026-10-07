@@ -76,7 +76,7 @@ fn main() {
 		}
 	};
 
-	// The context can be anything. In this exaxmple, we use a Sender<Ban> to send the information to a receiver, which can be assumed to be the main thread.
+	// The context can be anything. In this example, we use a Sender<Ban> to send the information to a receiver, which can be assumed to be the main thread.
 	// This is just an example, the context can be anything, including a mutable reference to a struct that holds state.
 	assert_matches!(command.execute(&mut tx, "ban you"), Ok(()));
 	assert_matches!(command.execute(&mut tx, "ban you absolutely_nothing"), Ok(()));

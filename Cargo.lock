@@ -3,9 +3,16 @@
 version = 4
 
 [[package]]
+name = "argv"
+version = "0.1.14"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f3e24f8dc0459339c238d92d26c467df5562301640657f57c5c7b4708d6539ce"
+
+[[package]]
 name = "command"
 version = "0.1.0"
 dependencies = [
+ "argv",
  "const-default",
  "internal-macros",
  "macros",

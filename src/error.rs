@@ -1,3 +1,6 @@
+use std::ffi::OsString;
+use thiserror::Error;
+
 #[derive(Debug, thiserror::Error)]
 pub enum CommandError {
 	// Internal errors
@@ -9,7 +12,9 @@ pub enum CommandError {
 	IncompleteCommand,
 	#[error("Unexpected trailing input: '{0}'")]
 	TrailingInput(String),
-
+	#[error(transparent)]
+	InputError(#[from] InputError),
+	
 	// Meant for external use, this error can be returned instead of other types as a generic message return type.
 	#[error("Command execution failed: {0}")]
 	Execution(String),
@@ -25,6 +30,12 @@ macro_rules! command_error {
     ($($arg:tt)*) => {
         return Err($crate::CommandError::Execution(format!($($arg)*)))
     };
+}
+
+#[derive(Debug, Error)]
+pub enum InputError {
+	#[error("Invalid UTF-8 input: {0:?}")]
+	InvalidUtf8(OsString)
 }
 
 pub(crate) enum DispatchError<Stack> {

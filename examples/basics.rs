@@ -2,7 +2,6 @@ use std::{
 	assert_matches,
 	convert::Infallible,
 };
-
 // These imports are normally not required, but since the example is within the same project as the main lib, the macro impl generates crate:: prefixed paths which break in this example
 use command::{
 	Argument,
@@ -74,9 +73,10 @@ fn main() {
 	};
 
 	assert_matches!(command.execute(&mut (), "hello there"), Ok(()));
-	assert_matches!(command.execute(&mut (), "hello"), Ok(()));
+	assert_matches!(command.execute(&mut (), "hello".to_string()), Ok(()));
 	assert_matches!(command.execute(&mut (), "hello2 function_test"), Ok(()));
-	assert_matches!(command.execute(&mut (), "test hi there test"), Ok(()));
+	// The input doesn't have to be a single string, it can also be an array/slice/vector of strings or command-line args obtained from std::env::args() (which will skip the first arg, which is the program name)
+	assert_matches!(command.execute(&mut (), ["test", "hi", "there", "test"]), Ok(()));
 	assert_matches!(command.execute(&mut (), "test hi there"), Err(CommandError::IncompleteCommand)); // An executor was not defined for arg2 node, it will return an Err
 	assert_matches!(command.execute(&mut (), "test hi"), Ok(()));
 }

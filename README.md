@@ -103,5 +103,5 @@ There are a few rules to the macro:
 Example command tree definitions can be found in [examples](./examples).
 
 ## Features
-- `const`:
-  Enabling this allows the `command!` macro to return a const-assignable value. The command tree evaluation still happens at runtime, but the tree itself can be stored in a `const` variable. The only addition required to make this is to implement (or derive) `ConstDefault` on the relevant `ArgParser` types.
+- `const`: Enabling this allows the `command!` macro to return a const-assignable value. The command tree evaluation still happens at runtime, but the tree itself can be stored in a `const` variable. The only addition required to make this is to implement (or derive) `ConstDefault` on the relevant `ArgParser` types.
+- `argv`: Adds support for argv crate, which allows iterating over the commandline arguments via an `Iterator<Item = &'static OsStr>` implementation. This is mainly for convenience, as it allows you to put in `arv::iter()` as the command input, which will convert the OsStr references into str references for you. This will skip the first argument, which is the executable itself. 

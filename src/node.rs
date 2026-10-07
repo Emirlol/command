@@ -4,86 +4,22 @@ use std::{
 };
 
 use crate::{
+	Input,
+	InputSource,
 	args::ArgParser,
 	error::{
 		CommandError,
 		DispatchError,
 		IntoDispatchError,
 	},
+	input::IntoInputSource,
 };
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct Checkpoint {
-	offset: usize,
-}
-
-#[derive(Debug)]
-pub struct Input<'a> {
-	source: &'a str,
-	offset: usize,
-}
-
-impl<'a> Input<'a> {
-	pub const fn new(source: &'a str) -> Self {
-		Self { source, offset: 0 }
-	}
-
-	pub const fn checkpoint(&self) -> Checkpoint {
-		Checkpoint { offset: self.offset }
-	}
-
-	pub const fn restore(&mut self, checkpoint: Checkpoint) {
-		self.offset = checkpoint.offset;
-	}
-
-	pub fn next_token(&mut self) -> Option<&'a str> {
-		self.skip_whitespace();
-
-		if self.offset >= self.source.len() {
-			return None;
-		}
-
-		let start = self.offset;
-		let rest = &self.source[start..];
-		let end = rest.find(char::is_whitespace).map_or(self.source.len(), |idx| start + idx);
-		self.offset = end;
-		Some(&self.source[start..end])
-	}
-
-	pub fn is_empty(&self) -> bool {
-		self.remaining_token().is_none()
-	}
-
-	pub fn remaining_token(&self) -> Option<&'a str> {
-		let mut offset = self.offset;
-		while let Some(ch) = self.source[offset..].chars().next() {
-			if !ch.is_whitespace() {
-				break;
-			}
-			offset += ch.len_utf8();
-		}
-
-		if offset >= self.source.len() {
-			return None;
-		}
-
-		let rest = &self.source[offset..];
-		let end = rest.find(char::is_whitespace).map_or(self.source.len(), |idx| offset + idx);
-		Some(&self.source[offset..end])
-	}
-
-	fn skip_whitespace(&mut self) {
-		while let Some(ch) = self.source[self.offset..].chars().next() {
-			if !ch.is_whitespace() {
-				break;
-			}
-			self.offset += ch.len_utf8();
-		}
-	}
-}
-
-pub trait CommandNode<Ctx, Stack> {
-	fn execute(&self, ctx: &mut Ctx, input: &mut Input<'_>, stack: Stack) -> Result<(), CommandError>;
+pub trait CommandNode<Ctx, Stack, Source>
+where
+	Source: InputSource,
+{
+	fn execute(&self, ctx: &mut Ctx, input: &mut Input<Source>, stack: Stack) -> Result<(), CommandError>;
 }
 
 pub trait Executor<Ctx, Stack> {
@@ -100,12 +36,30 @@ impl<Children> Root<Children> {
 		Self { children }
 	}
 
-	pub fn execute<Ctx>(&self, ctx: &mut Ctx, input: &str) -> Result<(), CommandError>
+	/// Executes the command tree with the given context and input source.
+	///
+	/// If there's no context to pass to the executor, you can alternatively use [`execute_no_context`] which will use `()` as the context type.
+	///
+	/// See [IntoInputSource] for supported input types.
+	pub fn execute<Ctx, Source>(&self, ctx: &mut Ctx, input: impl IntoInputSource<Source = Source>) -> Result<(), CommandError>
 	where
-		Children: CommandNode<Ctx, ()>,
+		Source: InputSource,
+		Children: CommandNode<Ctx, (), Source>,
 	{
-		let mut input = Input::new(input);
+		let mut input = Input::new(input.into_input_source()?);
 		self.children.execute(ctx, &mut input, ())
+	}
+
+	/// Executes the command tree with the given input source and `()` as the context.
+	///
+	/// See [IntoInputSource] for supported input types.
+	#[inline(always)]
+	pub fn execute_no_context<Source>(&self, input: impl IntoInputSource<Source = Source>) -> Result<(), CommandError>
+	where
+		Source: InputSource,
+		Children: CommandNode<(), (), Source>,
+	{
+		self.execute(&mut (), input)
 	}
 }
 
@@ -212,15 +166,16 @@ impl<Head: Default, Tail: Default> Default for Choice<Head, Tail> {
 	}
 }
 
-trait DispatchNode<Ctx, Stack> {
-	fn dispatch(&self, ctx: &mut Ctx, input: &mut Input<'_>, stack: Stack) -> Result<(), DispatchError<Stack>>;
+trait DispatchNode<Ctx, Stack, Source> {
+	fn dispatch(&self, ctx: &mut Ctx, input: &mut Input<Source>, stack: Stack) -> Result<(), DispatchError<Stack>>;
 }
 
-impl<Ctx, Stack, Node> CommandNode<Ctx, Stack> for Node
+impl<Ctx, Stack, Node, Source> CommandNode<Ctx, Stack, Source> for Node
 where
-	Node: DispatchNode<Ctx, Stack>,
+	Source: InputSource,
+	Node: DispatchNode<Ctx, Stack, Source>,
 {
-	fn execute(&self, ctx: &mut Ctx, input: &mut Input<'_>, stack: Stack) -> Result<(), CommandError> {
+	fn execute(&self, ctx: &mut Ctx, input: &mut Input<Source>, stack: Stack) -> Result<(), CommandError> {
 		match self.dispatch(ctx, input, stack) {
 			Ok(()) => Ok(()),
 			Err(DispatchError::Recoverable(error, _) | DispatchError::Fatal(error)) => Err(error),
@@ -228,48 +183,53 @@ where
 	}
 }
 
-impl<Ctx, Stack, const NAME: &'static str, Children> DispatchNode<Ctx, Stack> for Literal<NAME, Children>
+impl<Ctx, Stack, const NAME: &'static str, Children, Source> DispatchNode<Ctx, Stack, Source> for Literal<NAME, Children>
 where
-	Children: DispatchNode<Ctx, Stack>,
+	Source: InputSource,
+	Children: DispatchNode<Ctx, Stack, Source>,
 {
-	fn dispatch(&self, ctx: &mut Ctx, input: &mut Input<'_>, stack: Stack) -> Result<(), DispatchError<Stack>> {
+	fn dispatch(&self, ctx: &mut Ctx, input: &mut Input<Source>, stack: Stack) -> Result<(), DispatchError<Stack>> {
 		let checkpoint = input.checkpoint();
 		match input.next_token() {
 			Some(token) if token == NAME => self.children.dispatch(ctx, input, stack).map_err(DispatchError::into_fatal),
 			Some(token) => {
+				let token = token.to_owned(); // Drop the mutable reference to input to allow restoring the checkpoint, otherwise it would be a double mutable borrow of input.
 				input.restore(checkpoint);
-				Err(DispatchError::Recoverable(CommandError::UnknownCommand(token.to_owned()), stack))
+				Err(DispatchError::Recoverable(CommandError::UnknownCommand(token), stack))
 			}
 			None => Err(DispatchError::Recoverable(CommandError::IncompleteCommand, stack)),
 		}
 	}
 }
 
-impl<Ctx, Stack, const NAMES: &'static [&'static str], Children> DispatchNode<Ctx, Stack> for LiteralAliases<NAMES, Children>
+impl<Ctx, Stack, const NAMES: &'static [&'static str], Children, Source> DispatchNode<Ctx, Stack, Source> for LiteralAliases<NAMES, Children>
 where
-	Children: DispatchNode<Ctx, Stack>,
+	Source: InputSource,
+	Children: DispatchNode<Ctx, Stack, Source>,
 {
-	fn dispatch(&self, ctx: &mut Ctx, input: &mut Input<'_>, stack: Stack) -> Result<(), DispatchError<Stack>> {
+	fn dispatch(&self, ctx: &mut Ctx, input: &mut Input<Source>, stack: Stack) -> Result<(), DispatchError<Stack>> {
 		let checkpoint = input.checkpoint();
 
 		match input.next_token() {
 			Some(token) if NAMES.iter().any(|name| token == *name) => self.children.dispatch(ctx, input, stack).map_err(DispatchError::into_fatal),
 			Some(token) => {
+				let token = token.to_owned(); // Drop the mutable reference to input to allow restoring the checkpoint, otherwise it would be a double mutable borrow of input.
 				input.restore(checkpoint);
-				Err(DispatchError::Recoverable(CommandError::UnknownCommand(token.to_owned()), stack))
+				Err(DispatchError::Recoverable(CommandError::UnknownCommand(token), stack))
 			}
 			None => Err(DispatchError::Recoverable(CommandError::IncompleteCommand, stack)),
 		}
 	}
 }
 
-impl<Ctx, Stack, const NAME: &'static str, Parser, Children> DispatchNode<Ctx, Stack> for Argument<NAME, Parser, Children>
+impl<Ctx, Stack, const NAME: &'static str, Parser, Children, Source> DispatchNode<Ctx, Stack, Source> for Argument<NAME, Parser, Children>
 where
+	Source: InputSource,
 	Parser: ArgParser,
 	Parser::Error: Display,
-	Children: DispatchNode<Ctx, (Parser::Output, Stack)>,
+	Children: DispatchNode<Ctx, (Parser::Output, Stack), Source>,
 {
-	fn dispatch(&self, ctx: &mut Ctx, input: &mut Input<'_>, stack: Stack) -> Result<(), DispatchError<Stack>> {
+	fn dispatch(&self, ctx: &mut Ctx, input: &mut Input<Source>, stack: Stack) -> Result<(), DispatchError<Stack>> {
 		let checkpoint = input.checkpoint();
 		let Some(token) = input.next_token() else {
 			return Err(DispatchError::Recoverable(CommandError::IncompleteCommand, stack));
@@ -278,11 +238,13 @@ where
 		match self.parser.parse(token) {
 			Ok(value) => self.children.dispatch(ctx, input, (value, stack)).map_err(DispatchError::into_fatal_for_parent),
 			Err(error) => {
+				// Drop the mutable reference to input to allow restoring the checkpoint, otherwise it would be a double mutable borrow of input.
+				let token = token.to_owned();
 				input.restore(checkpoint);
 				Err(DispatchError::Recoverable(
 					CommandError::InvalidArgument {
 						name: NAME,
-						value: token.to_owned(),
+						value: token,
 						reason: error.to_string(),
 					},
 					stack,
@@ -292,50 +254,56 @@ where
 	}
 }
 
-impl<Ctx, Stack, Node, F> DispatchNode<Ctx, Stack> for WithExec<Node, F>
+impl<Ctx, Stack, Node, F, Source> DispatchNode<Ctx, Stack, Source> for WithExec<Node, F>
 where
-	Node: DispatchNode<Ctx, Stack>,
-	F: DispatchNode<Ctx, Stack>,
+	Source: InputSource,
+	Node: DispatchNode<Ctx, Stack, Source>,
+	F: DispatchNode<Ctx, Stack, Source>,
 {
-	fn dispatch(&self, ctx: &mut Ctx, input: &mut Input<'_>, stack: Stack) -> Result<(), DispatchError<Stack>> {
-		if input.is_empty() {
-			self.executor.dispatch(ctx, input, stack)
-		} else {
+	fn dispatch(&self, ctx: &mut Ctx, input: &mut Input<Source>, stack: Stack) -> Result<(), DispatchError<Stack>> {
+		if input.has_remaining() {
 			self.node.dispatch(ctx, input, stack)
+		} else {
+			self.executor.dispatch(ctx, input, stack)
 		}
 	}
 }
 
-impl<Ctx, Stack, F> DispatchNode<Ctx, Stack> for Exec<F>
+impl<Ctx, Stack, F, Source> DispatchNode<Ctx, Stack, Source> for Exec<F>
 where
+	Source: InputSource,
 	F: Executor<Ctx, Stack>,
 	F::Error: IntoDispatchError,
 {
-	fn dispatch(&self, ctx: &mut Ctx, input: &mut Input<'_>, stack: Stack) -> Result<(), DispatchError<Stack>> {
-		if let Some(token) = input.remaining_token() {
-			return Err(DispatchError::Fatal(CommandError::TrailingInput(token.to_owned())));
+	fn dispatch(&self, ctx: &mut Ctx, input: &mut Input<Source>, stack: Stack) -> Result<(), DispatchError<Stack>> {
+		if let Some(tokens) = input.remaining_tokens() {
+			return Err(DispatchError::Fatal(CommandError::TrailingInput(tokens.join(" "))));
 		}
 
 		self.executor.run(ctx, stack).map_err(IntoDispatchError::into_fatal) // IntoDispatchError has a specialization for CommandError to not box it again
 	}
 }
 
-impl<Ctx, Stack> DispatchNode<Ctx, Stack> for Nil {
-	fn dispatch(&self, _ctx: &mut Ctx, input: &mut Input<'_>, _stack: Stack) -> Result<(), DispatchError<Stack>> {
-		if let Some(token) = input.remaining_token() {
-			Err(DispatchError::Recoverable(CommandError::UnknownCommand(token.to_owned()), _stack))
+impl<Ctx, Stack, Source> DispatchNode<Ctx, Stack, Source> for Nil
+where
+	Source: InputSource,
+{
+	fn dispatch(&self, _ctx: &mut Ctx, input: &mut Input<Source>, _stack: Stack) -> Result<(), DispatchError<Stack>> {
+		if let Some(tokens) = input.remaining_tokens() {
+			Err(DispatchError::Recoverable(CommandError::UnknownCommand(tokens.join(" ")), _stack))
 		} else {
 			Err(DispatchError::Recoverable(CommandError::IncompleteCommand, _stack))
 		}
 	}
 }
 
-impl<Ctx, Stack, Head, Tail> DispatchNode<Ctx, Stack> for Choice<Head, Tail>
+impl<Ctx, Stack, Head, Tail, Source> DispatchNode<Ctx, Stack, Source> for Choice<Head, Tail>
 where
-	Head: DispatchNode<Ctx, Stack>,
-	Tail: DispatchNode<Ctx, Stack>,
+	Source: InputSource,
+	Head: DispatchNode<Ctx, Stack, Source>,
+	Tail: DispatchNode<Ctx, Stack, Source>,
 {
-	fn dispatch(&self, ctx: &mut Ctx, input: &mut Input<'_>, stack: Stack) -> Result<(), DispatchError<Stack>> {
+	fn dispatch(&self, ctx: &mut Ctx, input: &mut Input<Source>, stack: Stack) -> Result<(), DispatchError<Stack>> {
 		let checkpoint = input.checkpoint();
 		match self.head.dispatch(ctx, input, stack) {
 			Ok(()) => Ok(()),
