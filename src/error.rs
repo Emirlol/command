@@ -1,5 +1,4 @@
 use std::ffi::OsString;
-use thiserror::Error;
 
 #[derive(Debug, thiserror::Error)]
 pub enum CommandError {
@@ -14,7 +13,7 @@ pub enum CommandError {
 	TrailingInput(String),
 	#[error(transparent)]
 	InputError(#[from] InputError),
-	
+
 	// Meant for external use, this error can be returned instead of other types as a generic message return type.
 	#[error("Command execution failed: {0}")]
 	Execution(String),
@@ -32,7 +31,7 @@ macro_rules! command_error {
     };
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, thiserror::Error)]
 pub enum InputError {
 	#[error("Invalid UTF-8 input: {0:?}")]
 	InvalidUtf8(OsString)
