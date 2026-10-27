@@ -7,7 +7,7 @@ use crate::{
 /// A node that can dispatch commands based on the input.
 ///
 /// This is used for navigating the command tree.
-pub(crate) trait DispatchNode<Ctx, Stack, Source>
+pub trait DispatchNode<Ctx, Stack, Source>
 where
 	Source: InputSource,
 {

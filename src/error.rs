@@ -34,15 +34,15 @@ macro_rules! command_error {
 #[derive(Debug, thiserror::Error)]
 pub enum InputError {
 	#[error("Invalid UTF-8 input: {0:?}")]
-	InvalidUtf8(OsString)
+	InvalidUtf8(OsString),
 }
 
-pub(crate) enum DispatchError<Stack> {
+pub enum DispatchError<Stack> {
 	Recoverable(CommandError, Stack),
 	Fatal(CommandError),
 }
 
-pub(crate) trait IntoDispatchError {
+pub trait IntoDispatchError {
 	fn into_fatal<Stack>(self) -> DispatchError<Stack>;
 }
 

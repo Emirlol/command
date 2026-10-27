@@ -14,9 +14,8 @@ mod nil;
 pub use nil::*;
 mod choice;
 pub use choice::*;
-mod command_node;
-pub use command_node::*;
 mod dispatch_node;
+pub use dispatch_node::*;
 
 use crate::error::DispatchError;
 

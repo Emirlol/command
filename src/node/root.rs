@@ -1,9 +1,10 @@
 use crate::{
 	CommandError,
+	DispatchNode,
 	Input,
 	InputSource,
 	IntoInputSource,
-	CommandNode,
+	error::DispatchError,
 };
 
 /// The root of a command tree.
@@ -25,10 +26,13 @@ impl<Children> Root<Children> {
 	pub fn execute<Ctx, Source>(&self, ctx: &mut Ctx, input: impl IntoInputSource<Source = Source>) -> Result<(), CommandError>
 	where
 		Source: InputSource,
-		Children: CommandNode<Ctx, (), Source>,
+		Children: DispatchNode<Ctx, (), Source>,
 	{
 		let mut input = Input::new(input.into_input_source()?);
-		self.children.execute(ctx, &mut input, ())
+		match self.children.dispatch(ctx, &mut input, ()) {
+			Ok(()) => Ok(()),
+			Err(DispatchError::Recoverable(error, _) | DispatchError::Fatal(error)) => Err(error),
+		}
 	}
 
 	/// Executes the command tree with the given input source and `()` as the context.
@@ -38,7 +42,7 @@ impl<Children> Root<Children> {
 	pub fn execute_no_context<Source>(&self, input: impl IntoInputSource<Source = Source>) -> Result<(), CommandError>
 	where
 		Source: InputSource,
-		Children: CommandNode<(), (), Source>,
+		Children: DispatchNode<(), (), Source>,
 	{
 		self.execute(&mut (), input)
 	}
