@@ -1,3 +1,4 @@
+use proc_macro::TokenStream as StdTokenStream;
 use proc_macro2::{
 	Ident,
 	TokenStream,
@@ -8,8 +9,13 @@ use quote::{
 };
 
 #[proc_macro]
-pub fn impl_executor(_: proc_macro::TokenStream) -> proc_macro::TokenStream {
-	(0..=26).map(executor_impl).collect::<TokenStream>().into()
+pub fn impl_executor(input: StdTokenStream) -> StdTokenStream {
+	let int = syn::parse_macro_input!(input as syn::LitInt);
+	let count = int.base10_parse::<usize>().expect("Failed to parse integer literal");
+	if count > 26 {
+		panic!("Maximum of 26 arguments supported");
+	}
+	(0..=count).map(executor_impl).collect::<TokenStream>().into()
 }
 
 fn executor_impl(arg_count: usize) -> TokenStream {

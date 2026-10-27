@@ -1,319 +1,28 @@
-use std::{
-	error::Error,
-	fmt::Display,
-};
+mod root;
+pub use root::*;
+mod literal;
+pub use literal::*;
+mod literal_aliases;
+pub use literal_aliases::*;
+mod argument;
+pub use argument::*;
+mod exec;
+pub use exec::*;
+mod with_exec;
+pub use with_exec::*;
+mod nil;
+pub use nil::*;
+mod choice;
+pub use choice::*;
+mod command_node;
+pub use command_node::*;
+mod dispatch_node;
 
-use crate::{
-	Input,
-	InputSource,
-	args::ArgParser,
-	error::{
-		CommandError,
-		DispatchError,
-		IntoDispatchError,
-	},
-	input::IntoInputSource,
-};
-
-pub trait CommandNode<Ctx, Stack, Source>
-where
-	Source: InputSource,
-{
-	fn execute(&self, ctx: &mut Ctx, input: &mut Input<Source>, stack: Stack) -> Result<(), CommandError>;
-}
+use crate::error::DispatchError;
 
 pub trait Executor<Ctx, Stack> {
-	type Error: Error + Send + Sync;
+	type Error: std::error::Error + Send + Sync;
 	fn run(&self, ctx: &mut Ctx, stack: Stack) -> Result<(), Self::Error>;
-}
-
-pub struct Root<Children> {
-	children: Children,
-}
-
-impl<Children> Root<Children> {
-	pub const fn new(children: Children) -> Self {
-		Self { children }
-	}
-
-	/// Executes the command tree with the given context and input source.
-	///
-	/// If there's no context to pass to the executor, you can alternatively use [`execute_no_context`] which will use `()` as the context type.
-	///
-	/// See [IntoInputSource] for supported input types.
-	pub fn execute<Ctx, Source>(&self, ctx: &mut Ctx, input: impl IntoInputSource<Source = Source>) -> Result<(), CommandError>
-	where
-		Source: InputSource,
-		Children: CommandNode<Ctx, (), Source>,
-	{
-		let mut input = Input::new(input.into_input_source()?);
-		self.children.execute(ctx, &mut input, ())
-	}
-
-	/// Executes the command tree with the given input source and `()` as the context.
-	///
-	/// See [IntoInputSource] for supported input types.
-	#[inline(always)]
-	pub fn execute_no_context<Source>(&self, input: impl IntoInputSource<Source = Source>) -> Result<(), CommandError>
-	where
-		Source: InputSource,
-		Children: CommandNode<(), (), Source>,
-	{
-		self.execute(&mut (), input)
-	}
-}
-
-impl<Children: Default> Default for Root<Children> {
-	fn default() -> Self {
-		Self::new(Children::default())
-	}
-}
-
-pub struct Literal<const NAME: &'static str, Children> {
-	children: Children,
-}
-
-impl<const NAME: &'static str, Children> Literal<NAME, Children> {
-	pub const fn new(children: Children) -> Self {
-		Self { children }
-	}
-}
-
-impl<const NAME: &'static str, Children: Default> Default for Literal<NAME, Children> {
-	fn default() -> Self {
-		Self::new(Children::default())
-	}
-}
-
-pub struct LiteralAliases<const NAMES: &'static [&'static str], Children> {
-	children: Children,
-}
-
-impl<const NAMES: &'static [&'static str], Children> LiteralAliases<NAMES, Children> {
-	pub const fn new(children: Children) -> Self {
-		Self { children }
-	}
-}
-
-impl<const NAMES: &'static [&'static str], Children: Default> Default for LiteralAliases<NAMES, Children> {
-	fn default() -> Self {
-		Self::new(Children::default())
-	}
-}
-
-pub struct Argument<const NAME: &'static str, Parser, Children> {
-	parser: Parser,
-	children: Children,
-}
-
-impl<const NAME: &'static str, Parser, Children> Argument<NAME, Parser, Children> {
-	pub const fn new(parser: Parser, children: Children) -> Self {
-		Self { parser, children }
-	}
-}
-
-impl<const NAME: &'static str, Parser: Default, Children: Default> Default for Argument<NAME, Parser, Children> {
-	fn default() -> Self {
-		Self::new(Parser::default(), Children::default())
-	}
-}
-
-pub struct Exec<F> {
-	executor: F,
-}
-
-impl<F> Exec<F> {
-	pub const fn new(executor: F) -> Self {
-		Self { executor }
-	}
-}
-
-impl<F: Default> Default for Exec<F> {
-	fn default() -> Self {
-		Self::new(F::default())
-	}
-}
-
-pub struct WithExec<Node, F> {
-	node: Node,
-	executor: F,
-}
-
-impl<Node, F> WithExec<Node, F> {
-	pub const fn new(node: Node, executor: F) -> Self {
-		Self { node, executor }
-	}
-}
-
-#[derive(Default)]
-pub struct Nil;
-
-// Meant for Argument sibling nodes that linearly searches for a successful parse.
-pub struct Choice<Head, Tail> {
-	head: Head,
-	tail: Tail,
-}
-
-impl<Head, Tail> Choice<Head, Tail> {
-	pub const fn new(head: Head, tail: Tail) -> Self {
-		Self { head, tail }
-	}
-}
-
-impl<Head: Default, Tail: Default> Default for Choice<Head, Tail> {
-	fn default() -> Self {
-		Self::new(Head::default(), Tail::default())
-	}
-}
-
-trait DispatchNode<Ctx, Stack, Source> {
-	fn dispatch(&self, ctx: &mut Ctx, input: &mut Input<Source>, stack: Stack) -> Result<(), DispatchError<Stack>>;
-}
-
-impl<Ctx, Stack, Node, Source> CommandNode<Ctx, Stack, Source> for Node
-where
-	Source: InputSource,
-	Node: DispatchNode<Ctx, Stack, Source>,
-{
-	fn execute(&self, ctx: &mut Ctx, input: &mut Input<Source>, stack: Stack) -> Result<(), CommandError> {
-		match self.dispatch(ctx, input, stack) {
-			Ok(()) => Ok(()),
-			Err(DispatchError::Recoverable(error, _) | DispatchError::Fatal(error)) => Err(error),
-		}
-	}
-}
-
-impl<Ctx, Stack, const NAME: &'static str, Children, Source> DispatchNode<Ctx, Stack, Source> for Literal<NAME, Children>
-where
-	Source: InputSource,
-	Children: DispatchNode<Ctx, Stack, Source>,
-{
-	fn dispatch(&self, ctx: &mut Ctx, input: &mut Input<Source>, stack: Stack) -> Result<(), DispatchError<Stack>> {
-		let checkpoint = input.checkpoint();
-		match input.next_token() {
-			Some(token) if token == NAME => self.children.dispatch(ctx, input, stack).map_err(DispatchError::into_fatal),
-			Some(token) => {
-				let token = token.to_owned(); // Drop the mutable reference to input to allow restoring the checkpoint, otherwise it would be a double mutable borrow of input.
-				input.restore(checkpoint);
-				Err(DispatchError::Recoverable(CommandError::UnknownCommand(token), stack))
-			}
-			None => Err(DispatchError::Recoverable(CommandError::IncompleteCommand, stack)),
-		}
-	}
-}
-
-impl<Ctx, Stack, const NAMES: &'static [&'static str], Children, Source> DispatchNode<Ctx, Stack, Source> for LiteralAliases<NAMES, Children>
-where
-	Source: InputSource,
-	Children: DispatchNode<Ctx, Stack, Source>,
-{
-	fn dispatch(&self, ctx: &mut Ctx, input: &mut Input<Source>, stack: Stack) -> Result<(), DispatchError<Stack>> {
-		let checkpoint = input.checkpoint();
-
-		match input.next_token() {
-			Some(token) if NAMES.iter().any(|name| token == *name) => self.children.dispatch(ctx, input, stack).map_err(DispatchError::into_fatal),
-			Some(token) => {
-				let token = token.to_owned(); // Drop the mutable reference to input to allow restoring the checkpoint, otherwise it would be a double mutable borrow of input.
-				input.restore(checkpoint);
-				Err(DispatchError::Recoverable(CommandError::UnknownCommand(token), stack))
-			}
-			None => Err(DispatchError::Recoverable(CommandError::IncompleteCommand, stack)),
-		}
-	}
-}
-
-impl<Ctx, Stack, const NAME: &'static str, Parser, Children, Source> DispatchNode<Ctx, Stack, Source> for Argument<NAME, Parser, Children>
-where
-	Source: InputSource,
-	Parser: ArgParser,
-	Parser::Error: Display,
-	Children: DispatchNode<Ctx, (Parser::Output, Stack), Source>,
-{
-	fn dispatch(&self, ctx: &mut Ctx, input: &mut Input<Source>, stack: Stack) -> Result<(), DispatchError<Stack>> {
-		let checkpoint = input.checkpoint();
-		let Some(token) = input.next_token() else {
-			return Err(DispatchError::Recoverable(CommandError::IncompleteCommand, stack));
-		};
-
-		match self.parser.parse(token) {
-			Ok(value) => self.children.dispatch(ctx, input, (value, stack)).map_err(DispatchError::into_fatal_for_parent),
-			Err(error) => {
-				// Drop the mutable reference to input to allow restoring the checkpoint, otherwise it would be a double mutable borrow of input.
-				let token = token.to_owned();
-				input.restore(checkpoint);
-				Err(DispatchError::Recoverable(
-					CommandError::InvalidArgument {
-						name: NAME,
-						value: token,
-						reason: error.to_string(),
-					},
-					stack,
-				))
-			}
-		}
-	}
-}
-
-impl<Ctx, Stack, Node, F, Source> DispatchNode<Ctx, Stack, Source> for WithExec<Node, F>
-where
-	Source: InputSource,
-	Node: DispatchNode<Ctx, Stack, Source>,
-	F: DispatchNode<Ctx, Stack, Source>,
-{
-	fn dispatch(&self, ctx: &mut Ctx, input: &mut Input<Source>, stack: Stack) -> Result<(), DispatchError<Stack>> {
-		if input.has_remaining() {
-			self.node.dispatch(ctx, input, stack)
-		} else {
-			self.executor.dispatch(ctx, input, stack)
-		}
-	}
-}
-
-impl<Ctx, Stack, F, Source> DispatchNode<Ctx, Stack, Source> for Exec<F>
-where
-	Source: InputSource,
-	F: Executor<Ctx, Stack>,
-	F::Error: IntoDispatchError,
-{
-	fn dispatch(&self, ctx: &mut Ctx, input: &mut Input<Source>, stack: Stack) -> Result<(), DispatchError<Stack>> {
-		if let Some(tokens) = input.remaining_tokens() {
-			return Err(DispatchError::Fatal(CommandError::TrailingInput(tokens.join(" "))));
-		}
-
-		self.executor.run(ctx, stack).map_err(IntoDispatchError::into_fatal) // IntoDispatchError has a specialization for CommandError to not box it again
-	}
-}
-
-impl<Ctx, Stack, Source> DispatchNode<Ctx, Stack, Source> for Nil
-where
-	Source: InputSource,
-{
-	fn dispatch(&self, _ctx: &mut Ctx, input: &mut Input<Source>, _stack: Stack) -> Result<(), DispatchError<Stack>> {
-		if let Some(tokens) = input.remaining_tokens() {
-			Err(DispatchError::Recoverable(CommandError::UnknownCommand(tokens.join(" ")), _stack))
-		} else {
-			Err(DispatchError::Recoverable(CommandError::IncompleteCommand, _stack))
-		}
-	}
-}
-
-impl<Ctx, Stack, Head, Tail, Source> DispatchNode<Ctx, Stack, Source> for Choice<Head, Tail>
-where
-	Source: InputSource,
-	Head: DispatchNode<Ctx, Stack, Source>,
-	Tail: DispatchNode<Ctx, Stack, Source>,
-{
-	fn dispatch(&self, ctx: &mut Ctx, input: &mut Input<Source>, stack: Stack) -> Result<(), DispatchError<Stack>> {
-		let checkpoint = input.checkpoint();
-		match self.head.dispatch(ctx, input, stack) {
-			Ok(()) => Ok(()),
-			Err(DispatchError::Fatal(error)) => Err(DispatchError::Fatal(error)),
-			Err(DispatchError::Recoverable(_, stack)) => {
-				input.restore(checkpoint);
-				self.tail.dispatch(ctx, input, stack)
-			}
-		}
-	}
 }
 
 impl<Stack> DispatchError<Stack> {
@@ -332,18 +41,14 @@ impl<Stack> DispatchError<Stack> {
 	}
 }
 
-internal_macros::impl_executor!();
+internal_macros::impl_executor!(26); // Support stacks up to 26 deep -- this means there can be up to 26 consecutive argument nodes in a command. If this is not enough, you're doing something weird.
 
 #[cfg(test)]
 mod tests {
 	use std::assert_matches;
 
 	use super::*;
-	use crate::{
-		BoolParser,
-		I32Parser,
-		StringParser,
-	};
+	use crate::*;
 
 	#[derive(Default)]
 	struct TestCtx {
