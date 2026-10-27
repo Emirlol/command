@@ -1,9 +1,12 @@
-use crate::{Input, InputSource};
-use crate::error::DispatchError;
-use crate::node::dispatch_node::DispatchNode;
+use crate::{
+	Input,
+	InputSource,
+	error::DispatchError,
+	node::dispatch_node::DispatchNode,
+};
 
 /// A node that has 2 child nodes.
-/// 
+///
 /// This is the main building block of a command tree, allowing for branching between different command paths.
 pub struct Choice<Head, Tail> {
 	head: Head,

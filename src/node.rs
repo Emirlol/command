@@ -40,7 +40,7 @@ impl<Stack> DispatchError<Stack> {
 	}
 }
 
-internal_macros::impl_executor!(26); // Support stacks up to 26 deep -- this means there can be up to 26 consecutive argument nodes in a command. If this is not enough, you're doing something weird.
+internal_macros::impl_executor!(25); // Support stacks up to 25 deep -- this means there can be up to 25 consecutive argument nodes in a command. If this is not enough, you're doing something weird.
 
 #[cfg(test)]
 mod tests {
@@ -110,7 +110,7 @@ mod tests {
 	}
 
 	#[test]
-	fn executor_impl_supports_twenty_six_arguments() {
+	fn executor_impl_supports_twenty_five_arguments() {
 		let executor = |ctx: &mut TestCtx,
 		                a: i32,
 		                b: i32,
@@ -136,24 +136,20 @@ mod tests {
 		                v: i32,
 		                w: i32,
 		                x: i32,
-		                y: i32,
-		                z: i32| {
+		                y: i32| {
 			ctx.calls
-				.push(format!("{a},{b},{c},{d},{e},{f},{g},{h},{i},{j},{k},{l},{m},{n},{o},{p},{q},{r},{s},{t},{u},{v},{w},{x},{y},{z}"));
+				.push(format!("{a},{b},{c},{d},{e},{f},{g},{h},{i},{j},{k},{l},{m},{n},{o},{p},{q},{r},{s},{t},{u},{v},{w},{x},{y}"));
 			Ok::<(), CommandError>(())
 		};
 		let stack = (
-			26,
+			25,
 			(
-				25,
+				24,
 				(
-					24,
+					23,
 					(
-						23,
-						(
-							22,
-							(21, (20, (19, (18, (17, (16, (15, (14, (13, (12, (11, (10, (9, (8, (7, (6, (5, (4, (3, (2, (1, ()))))))))))))))))))))),
-						),
+						22,
+						(21, (20, (19, (18, (17, (16, (15, (14, (13, (12, (11, (10, (9, (8, (7, (6, (5, (4, (3, (2, (1, ()))))))))))))))))))))),
 					),
 				),
 			),
@@ -162,7 +158,7 @@ mod tests {
 
 		executor.run(&mut ctx, stack).unwrap();
 
-		assert_eq!(ctx.calls, ["1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26"]);
+		assert_eq!(ctx.calls, ["1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25"]);
 	}
 
 	#[test]

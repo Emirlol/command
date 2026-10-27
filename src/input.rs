@@ -23,27 +23,32 @@ impl<S: InputSource> Input<S> {
 		Self { source, offset: 0 }
 	}
 
+	/// Returns a checkpoint of the current input offset, which can be used to restore the offset later.
 	#[inline(always)]
 	pub const fn checkpoint(&self) -> Checkpoint {
 		Checkpoint { offset: self.offset }
 	}
 
+	/// Restores the input offset to a previously saved checkpoint.
 	#[inline(always)]
 	pub const fn restore(&mut self, checkpoint: Checkpoint) {
 		self.offset = checkpoint.offset;
 	}
 
+	/// Returns whether there are remaining tokens in the input source from the current offset.
 	#[inline(always)]
 	pub fn has_remaining(&self) -> bool {
 		self.source.has_remaining(self.offset)
 	}
 
+	/// Returns the remaining tokens from the current offset, or `None` if there are no more tokens.
 	#[inline(always)]
 	pub fn remaining_tokens(&self) -> Option<Vec<&str>> {
 		// The impl is left to the source, as the source may have more efficient ways to get the remaining rather than just iterating over offset..len and calling get on each
 		self.source.remaining_tokens(self.offset)
 	}
 
+	/// Advances the offset and returns the next token, or `None` if there are no more tokens.
 	#[inline(always)]
 	pub fn next_token(&mut self) -> Option<&str> {
 		let token = self.source.get(self.offset);

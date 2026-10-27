@@ -12,14 +12,11 @@ use quote::{
 pub fn impl_executor(input: StdTokenStream) -> StdTokenStream {
 	let int = syn::parse_macro_input!(input as syn::LitInt);
 	let count = int.base10_parse::<usize>().expect("Failed to parse integer literal");
-	if count > 26 {
-		panic!("Maximum of 26 arguments supported");
-	}
 	(0..=count).map(executor_impl).collect::<TokenStream>().into()
 }
 
 fn executor_impl(arg_count: usize) -> TokenStream {
-	let types = (b'A'..=b'Z').take(arg_count).map(|letter| format_ident!("{}", letter as char)).collect::<Vec<_>>();
+	let types = (0..arg_count).map(|i| format_ident!("T{}", i)).collect::<Vec<_>>();
 	let values = types.iter().map(|ty| format_ident!("{}", ty.to_string().to_lowercase())).collect::<Vec<_>>();
 	let stack = recursive_tuple(types.iter());
 

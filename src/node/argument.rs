@@ -1,7 +1,13 @@
 use std::fmt::Display;
-use crate::{ArgParser, CommandError, Input, InputSource};
-use crate::error::DispatchError;
-use crate::node::dispatch_node::DispatchNode;
+
+use crate::{
+	ArgParser,
+	CommandError,
+	Input,
+	InputSource,
+	error::DispatchError,
+	node::dispatch_node::DispatchNode,
+};
 
 pub struct Argument<const NAME: &'static str, Parser, Children> {
 	parser: Parser,
