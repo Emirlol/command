@@ -1,20 +1,23 @@
-use proc_macro2::TokenStream;
 use proc_macro_crate::crate_name;
+use proc_macro2::TokenStream;
 use quote::{
+	ToTokens,
 	format_ident,
 	quote,
-	ToTokens,
 };
-use syn::token::Or;
 use syn::{
+	Expr,
+	LitStr,
 	braced,
 	parse::{
 		Parse,
 		ParseStream,
 	},
 	parse_macro_input,
-	token::Colon,
-	LitStr,
+	token::{
+		Colon,
+		Or,
+	},
 };
 
 mod kw {
@@ -23,6 +26,7 @@ mod kw {
 	custom_keyword!(literal);
 	custom_keyword!(argument);
 	custom_keyword!(executes);
+	custom_keyword!(description);
 }
 
 const MAIN_CRATE_NAME: &str = "command";
@@ -44,8 +48,8 @@ pub fn command(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
 	quote! {
 		#crate_path::Root::new(#tree)
 	}
-		.into_token_stream()
-		.into()
+	.into_token_stream()
+	.into()
 }
 
 // region CommandTree
@@ -131,11 +135,13 @@ impl ToTokens for CommandTree {
 enum CommandNode {
 	Literal {
 		names: Vec<LitStr>,
+		description: Expr,
 		children: CommandTree,
 		executor: Option<Executor>,
 	},
 	Argument {
 		name: LitStr,
+		description: Expr,
 		parser_type: syn::Type,
 		children: CommandTree,
 		executor: Option<Executor>,
@@ -155,7 +161,13 @@ impl Parse for CommandNode {
 			}
 
 			let mut executor: Option<Executor> = None;
+			let mut description: Option<Expr> = None;
 			let mut children: Vec<CommandNode> = Vec::new();
+			if input.peek(kw::description) {
+				let _description: kw::description = input.parse()?;
+				description = Some(input.parse()?);
+			}
+			// not else if, we want to allow chaining
 			if input.peek(kw::executes) {
 				executor = Some(input.parse()?);
 			} else {
@@ -165,6 +177,14 @@ impl Parse for CommandNode {
 				loop {
 					if content.peek(kw::literal) || content.peek(kw::argument) {
 						children.push(content.parse()?);
+					} else if content.peek(kw::description) {
+						if description.is_some() {
+							return Err(content.error("Multiple `description` expressions are not allowed"));
+						}
+						let _description: kw::description = content.parse()?;
+						let desc_content;
+						braced!(desc_content in content);
+						description = Some(desc_content.parse()?);
 					} else if content.peek(kw::executes) {
 						if executor.is_some() {
 							return Err(content.error("Multiple `executes` blocks are not allowed"));
@@ -183,14 +203,25 @@ impl Parse for CommandNode {
 			let children = CommandTree { root_nodes: children };
 			children.validate_nodes(&input)?;
 
-			Ok(CommandNode::Literal { names, children, executor })
+			Ok(CommandNode::Literal {
+				names,
+				description: description.unwrap_or_else(|| syn::parse_quote! { "" }),
+				children,
+				executor,
+			})
 		} else if input.peek(kw::argument) {
 			let _argument: kw::argument = input.parse()?;
 			let name: LitStr = input.parse()?;
 			let _colon: Colon = input.parse()?;
 			let parser_type: syn::Type = input.parse()?;
+			let mut description: Option<Expr> = None;
 			let mut executor: Option<Executor> = None;
 			let mut children: Vec<CommandNode> = Vec::new();
+			if input.peek(kw::description) {
+				let _description: kw::description = input.parse()?;
+				description = Some(input.parse()?);
+			}
+			// not else if, we want to allow chaining
 			if input.peek(kw::executes) {
 				executor = Some(input.parse()?);
 			} else {
@@ -200,6 +231,14 @@ impl Parse for CommandNode {
 				loop {
 					if content.peek(kw::literal) || content.peek(kw::argument) {
 						children.push(content.parse()?);
+					} else if content.peek(kw::description) {
+						if description.is_some() {
+							return Err(content.error("Multiple `description` expressions are not allowed"));
+						}
+						let _description: kw::description = content.parse()?;
+						let desc_content;
+						braced!(desc_content in content);
+						description = Some(desc_content.parse()?);
 					} else if content.peek(kw::executes) {
 						if executor.is_some() {
 							return Err(content.error("Multiple `executes` blocks are not allowed"));
@@ -220,6 +259,7 @@ impl Parse for CommandNode {
 
 			Ok(CommandNode::Argument {
 				name,
+				description: description.unwrap_or_else(|| syn::parse_quote! { "" }),
 				parser_type,
 				children,
 				executor,
@@ -234,19 +274,27 @@ impl ToTokens for CommandNode {
 	fn to_tokens(&self, tokens: &mut TokenStream) {
 		let crate_path = crate_path();
 		let node_tokens = match self {
-			CommandNode::Literal { names, children, executor } => {
+			CommandNode::Literal {
+				names,
+				description,
+				children,
+				executor,
+			} => {
 				let ty = match names.len() {
 					0 => unreachable!("Literal node must have at least one name"),
 					1 => {
 						let name = &names[0];
-						quote! { #crate_path::Literal::<#name, _> }
+						quote! { #crate_path::Literal::<#name, _, { #description }> }
 					}
-					_ => quote! { #crate_path::LiteralAliases::<{ &[#(#names),*] }, _>},
+					_ => quote! { #crate_path::LiteralAliases::<{ &[#(#names),*] }, _, { #description }>},
 				};
 				match executor {
 					Some(executor) => match children.root_nodes.len() {
 						0 => quote! { #ty::new(#executor) },
-						_ => quote! { #ty::new(#crate_path::WithExec::new(#children, #executor)) },
+						_ => {
+							let executor_fn = &executor.expr;
+							quote! { #ty::new(#crate_path::WithExec::new(#children, #executor_fn)) }
+						}
 					},
 					// `children` is guaranteed to be more than 0 if `executor` is None via parse-time validation, so this is safe
 					None => quote! { #ty::new(#children) },
@@ -254,6 +302,7 @@ impl ToTokens for CommandNode {
 			}
 			CommandNode::Argument {
 				name,
+				description,
 				parser_type,
 				children,
 				executor,
@@ -265,11 +314,14 @@ impl ToTokens for CommandNode {
 				};
 				match executor {
 					Some(executor) => match children.root_nodes.len() {
-						0 => quote! { #crate_path::Argument::<#name, #parser_type, _>::new(#parser_default, #executor) },
-						_ => quote! { #crate_path::Argument::<#name, #parser_type, _>::new(#parser_default, #crate_path::WithExec::new(#children, #executor)) },
+						0 => quote! { #crate_path::Argument::<#name, #parser_type, _, { #description }>::new(#parser_default, #executor) },
+						_ => {
+							let executor_fn = &executor.expr;
+							quote! { #crate_path::Argument::<#name, #parser_type, _, { #description }>::new(#parser_default, #crate_path::WithExec::new(#children, #executor_fn)) }
+						}
 					},
 					// `children` is guaranteed to be more than 0 if `executor` is None via parse-time validation, so this is safe
-					None => quote! { #crate_path::Argument::<#name, #parser_type, _>::new(#parser_default, #children) },
+					None => quote! { #crate_path::Argument::<#name, #parser_type, _, { #description }>::new(#parser_default, #children) },
 				}
 			}
 		};
@@ -281,7 +333,7 @@ impl ToTokens for CommandNode {
 
 // region Executor
 struct Executor {
-	expr: syn::Expr,
+	expr: Expr,
 }
 
 impl Parse for Executor {

@@ -7,3 +7,5 @@
 !/Cargo.toml
 !/README.md
 !/rustfmt.toml
+!/benches
+!/tests

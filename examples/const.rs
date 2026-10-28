@@ -13,29 +13,30 @@ use command::{
 	WithExec,
 };
 use command::{
+	BothInspect,
 	CommandError,
 	StringParser,
+	const_default,
 };
 use macros::command;
 
 // Same command tree from basics.rs, but const
 const COMMAND: Root<
 	Choice<
-		Literal<"hello", WithExec<Argument<"name", StringParser, Exec<fn(&mut (), String) -> Result<(), Infallible>>>, Exec<fn(&mut ()) -> Result<(), Infallible>>>>,
+		Literal<"hello", WithExec<Argument<"name", StringParser, Exec<fn(&mut (), String) -> Result<(), !>>>, fn(&mut ()) -> Result<(), !>>>,
 		Choice<
-			Literal<"hello2", Argument<"name", StringParser, Exec<fn(&mut (), String) -> Result<(), Infallible>>>>,
+			Literal<"hello2", Argument<"name", StringParser, Exec<fn(&mut (), String) -> Result<(), !>>>>,
 			Literal<
 				"test",
 				Argument<
 					"arg1",
 					StringParser,
-					WithExec<
-						Argument<"arg2", StringParser, Argument<"arg3", StringParser, Exec<fn(&mut (), String, String, String) -> Result<(), Infallible>>>>,
-						Exec<fn(&mut (), String) -> Result<(), Infallible>>,
-					>,
+					WithExec<Argument<"arg2", StringParser, Argument<"arg3", StringParser, Exec<fn(&mut (), String, String, String) -> Result<(), !>>>>, fn(&mut (), String) -> Result<(), !>>,
 				>,
 			>,
+			BothInspect,
 		>,
+		BothInspect,
 	>,
 > = command! {
 	literal "hello" {

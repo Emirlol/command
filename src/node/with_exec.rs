@@ -1,8 +1,14 @@
 use crate::{
-	DispatchNode,
+	DispatchError,
+	ExecutableNode,
+	Executor,
 	Input,
 	InputSource,
-	error::DispatchError,
+	InspectableNode,
+	InspectionError,
+	IntoDispatchError,
+	NodeInspector,
+	NodeMetadata,
 };
 
 /// A non-terminal node that can have 2 children:
@@ -23,22 +29,62 @@ pub struct WithExec<Node, F> {
 }
 
 impl<Node, F> WithExec<Node, F> {
+	#[inline(always)]
 	pub const fn new(node: Node, executor: F) -> Self {
 		Self { node, executor }
 	}
 }
 
-impl<Ctx, Stack, Node, F, Source> DispatchNode<Ctx, Stack, Source> for WithExec<Node, F>
+impl<Node, F> Default for WithExec<Node, F>
+where
+	Node: Default,
+	F: Default,
+{
+	fn default() -> Self {
+		Self::new(Node::default(), F::default())
+	}
+}
+
+#[cfg(feature = "const")]
+impl<Node, F> const_default::ConstDefault for WithExec<Node, F>
+where
+	Node: const_default::ConstDefault,
+	F: const_default::ConstDefault,
+{
+	const DEFAULT: Self = Self::new(Node::DEFAULT, F::DEFAULT);
+}
+
+impl<Ctx, Stack, Node, F, Source> ExecutableNode<Ctx, Stack, Source> for WithExec<Node, F>
 where
 	Source: InputSource,
-	Node: DispatchNode<Ctx, Stack, Source>,
-	F: DispatchNode<Ctx, Stack, Source>,
+	Node: ExecutableNode<Ctx, Stack, Source>,
+	F: Executor<Ctx, Stack>,
+	F::Error: IntoDispatchError,
 {
-	fn dispatch(&self, ctx: &mut Ctx, input: &mut Input<Source>, stack: Stack) -> Result<(), DispatchError<Stack>> {
+	fn execute(&self, ctx: &mut Ctx, input: &mut Input<Source>, stack: Stack) -> Result<(), DispatchError<Stack>> {
 		if input.has_remaining() {
-			self.node.dispatch(ctx, input, stack)
+			self.node.execute(ctx, input, stack)
 		} else {
-			self.executor.dispatch(ctx, input, stack)
+			self.executor.run(ctx, stack).map_err(IntoDispatchError::into_fatal)
 		}
+	}
+}
+
+// Delegating impl to the child node since the executors aren't counted as actual nodes in the command tree.
+impl<Node, F> NodeMetadata for WithExec<Node, F>
+where
+	Node: NodeMetadata,
+{
+	type Inspect = <Node as NodeMetadata>::Inspect;
+	type Kind = <Node as NodeMetadata>::Kind;
+}
+
+impl<Node, F, Source> InspectableNode<Source> for WithExec<Node, F>
+where
+	Source: InputSource,
+	Node: InspectableNode<Source>,
+{
+	fn inspect(&self, inspector: &mut NodeInspector, input: &mut Input<Source>) -> Result<(), InspectionError> {
+		self.node.inspect(inspector, input)
 	}
 }

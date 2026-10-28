@@ -2,17 +2,17 @@ use std::{
 	assert_matches,
 	convert::Infallible,
 };
+
 // These imports are normally not required, but since the example is within the same project as the main lib, the macro impl generates crate:: prefixed paths which break in this example
 use command::{
 	Argument,
+	BothInspect,
 	Choice,
 	Exec,
 	Literal,
 	Root,
 	WithExec,
 };
-
-
 use command::{
 	CommandError,
 	StringParser,
@@ -32,11 +32,13 @@ fn main() {
 						StringParser,
 						WithExec<
 							Argument<"arg2", StringParser, Argument<"arg3", StringParser, Exec<fn(&mut (), String, String, String) -> Result<(), Infallible>>>>,
-							Exec<fn(&mut (), String) -> Result<(), Infallible>>,
+							fn(&mut (), String) -> Result<(), Infallible>,
 						>,
 					>,
 				>,
+				BothInspect
 			>,
+			BothInspect
 		>,
 	>*/ = command! {
 		literal "hello" {

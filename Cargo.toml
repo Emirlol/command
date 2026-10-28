@@ -32,7 +32,18 @@ thiserror.workspace = true
 const-default = { workspace = true, optional = true, features = ["derive"] }
 argv = { version = "0.1.14", optional = true }
 
+[dev-dependencies]
+clap = { version = "4", features = ["derive"] }
+
+[[bench]]
+name = "dispatch"
+harness = true
+required-features = ["const"]
+
 [features]
+## Adds ANSI styling to help output. Disabled by default; when enabled, help strings include ANSI escape codes.
+ansi = []
+
 ## Enabling this allows the `command!` macro to return a const-assignable value. The command tree evaluation still happens at runtime, but the tree itself can be stored in a `const` variable. The only addition required to make this is to implement (or derive) `ConstDefault` on the relevant `ArgParser` types.
 const = ["macros/const", "dep:const-default"]
 
@@ -42,6 +53,10 @@ argv = ["dep:argv"]
 [[example]]
 name = "basics"
 path = "examples/basics.rs"
+
+[[example]]
+name = "repl"
+path = "examples/repl.rs"
 
 [[example]]
 name = "const"

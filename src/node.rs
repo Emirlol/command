@@ -1,4 +1,7 @@
 mod root;
+
+use std::fmt::Write;
+
 pub use root::*;
 mod literal;
 pub use literal::*;
@@ -18,229 +21,35 @@ pub use choice::*;
 use crate::{
 	Input,
 	InputSource,
-	error::DispatchError,
+	InspectMissingChild,
+	InspectionError,
+	NodeInspector,
 };
 
-pub trait Executor<Ctx, Stack> {
-	type Error: std::error::Error + Send + Sync;
-	fn run(&self, ctx: &mut Ctx, stack: Stack) -> Result<(), Self::Error>;
-}
+/// A trait that represents the kind of a node. This is used to determine how to inspect the node and its children.
+pub trait NodeKind {}
 
-/// A node that can dispatch commands based on the input.
-///
-/// This is used for navigating the command tree.
-pub trait DispatchNode<Ctx, Stack, Source>
+/// The default node kind for nodes that do not have any children to inspect. Any node that does not have any children to inspect should use this kind.
+pub struct NoInspectKind;
+
+impl NodeKind for NoInspectKind {}
+
+/// A default implementation of `InspectMissingChild` that does nothing. This is used for nodes that do not have any children to inspect.
+impl<Child, Source> InspectMissingChild<Child, Source> for NoInspectKind
 where
 	Source: InputSource,
 {
-	/// Dispatches the command based on the input and the current context.
-	fn dispatch(&self, ctx: &mut Ctx, input: &mut Input<Source>, stack: Stack) -> Result<(), DispatchError<Stack>>;
+	#[inline(always)]
+	fn inspect_missing(_child: &Child, _inspector: &mut NodeInspector, _input: &mut Input<Source>) -> Result<(), InspectionError> {
+		Ok(())
+	}
 }
 
-internal_macros::impl_executor!(25); // Support stacks up to 25 deep -- this means there can be up to 25 consecutive argument nodes in a command. If this is not enough, you're doing something weird.
-
-#[cfg(test)]
-mod tests {
-	use std::assert_matches;
-
-	use super::*;
-	use crate::*;
-
-	#[derive(Default)]
-	struct TestCtx {
-		calls: Vec<String>,
-	}
-
-	type ServerCommand<Stop, Ban> = Root<Literal<"server", Choice<Literal<"stop", Exec<Stop>>, Choice<Literal<"ban", Argument<"player", StringParser, Exec<Ban>>>, Nil>>>>;
-
-	fn server_command<Stop, Ban>(stop: Stop, ban: Ban) -> ServerCommand<Stop, Ban> {
-		Root::new(Literal::new(Choice::new(
-			Literal::<"stop", _>::new(Exec::new(stop)),
-			Choice::new(Literal::<"ban", _>::new(Argument::<"player", _, _>::new(StringParser, Exec::new(ban))), Nil),
-		)))
-	}
-
-	#[test]
-	fn literal_dispatch_executes_matching_leaf() {
-		let command = server_command(
-			|ctx: &mut TestCtx| {
-				ctx.calls.push("stop".to_owned());
-				Ok::<(), CommandError>(())
-			},
-			|_ctx: &mut TestCtx, _player: String| Ok::<(), CommandError>(()),
-		);
-		let mut ctx = TestCtx::default();
-
-		command.execute(&mut ctx, "server stop").unwrap();
-
-		assert_eq!(ctx.calls, ["stop"]);
-	}
-
-	#[test]
-	fn unknown_literals_return_errors() {
-		let command = server_command(|_ctx: &mut TestCtx| Ok::<(), CommandError>(()), |_ctx: &mut TestCtx, _player: String| Ok::<(), CommandError>(()));
-
-		match command.execute(&mut TestCtx::default(), "proxy stop") {
-			Err(CommandError::UnknownCommand(token)) => assert_eq!(token, "proxy"),
-			_ => panic!("Expected UnknownCommand error"),
-		}
-		match command.execute(&mut TestCtx::default(), "server restart") {
-			Err(CommandError::UnknownCommand(token)) => assert_eq!(token, "restart"),
-			_ => panic!("Expected UnknownCommand error"),
-		}
-	}
-
-	#[test]
-	fn typed_arguments_flow_to_executor_in_source_order() {
-		let command = server_command(
-			|_ctx: &mut TestCtx| Ok::<(), CommandError>(()),
-			|ctx: &mut TestCtx, player: String| {
-				ctx.calls.push(format!("ban:{player}"));
-				Ok::<(), CommandError>(())
-			},
-		);
-		let mut ctx = TestCtx::default();
-
-		command.execute(&mut ctx, "server ban Steve").unwrap();
-
-		assert_eq!(ctx.calls, ["ban:Steve"]);
-	}
-
-	#[test]
-	fn executor_impl_supports_twenty_five_arguments() {
-		let executor = |ctx: &mut TestCtx,
-		                a: i32,
-		                b: i32,
-		                c: i32,
-		                d: i32,
-		                e: i32,
-		                f: i32,
-		                g: i32,
-		                h: i32,
-		                i: i32,
-		                j: i32,
-		                k: i32,
-		                l: i32,
-		                m: i32,
-		                n: i32,
-		                o: i32,
-		                p: i32,
-		                q: i32,
-		                r: i32,
-		                s: i32,
-		                t: i32,
-		                u: i32,
-		                v: i32,
-		                w: i32,
-		                x: i32,
-		                y: i32| {
-			ctx.calls
-				.push(format!("{a},{b},{c},{d},{e},{f},{g},{h},{i},{j},{k},{l},{m},{n},{o},{p},{q},{r},{s},{t},{u},{v},{w},{x},{y}"));
-			Ok::<(), CommandError>(())
-		};
-		let stack = (
-			25,
-			(
-				24,
-				(
-					23,
-					(
-						22,
-						(21, (20, (19, (18, (17, (16, (15, (14, (13, (12, (11, (10, (9, (8, (7, (6, (5, (4, (3, (2, (1, ()))))))))))))))))))))),
-					),
-				),
-			),
-		);
-		let mut ctx = TestCtx::default();
-
-		executor.run(&mut ctx, stack).unwrap();
-
-		assert_eq!(ctx.calls, ["1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25"]);
-	}
-
-	#[test]
-	fn sibling_branches_restore_cursor() {
-		let command = Root::new(Literal::<"server", _>::new(Choice::new(
-			Literal::<"stop", _>::new(Exec::new(|_ctx: &mut TestCtx| Ok::<(), CommandError>(()))),
-			Literal::<"start", _>::new(Exec::new(|ctx: &mut TestCtx| {
-				ctx.calls.push("start".to_owned());
-				Ok::<(), CommandError>(())
-			})),
-		)));
-		let mut ctx = TestCtx::default();
-
-		command.execute(&mut ctx, "server start").unwrap();
-
-		assert_eq!(ctx.calls, ["start"]);
-	}
-
-	#[test]
-	fn literal_branch_precedes_argument_branch() {
-		let command = Root::new(Literal::<"server", _>::new(Choice::new(
-			Literal::<"true", _>::new(Exec::new(|ctx: &mut TestCtx| {
-				ctx.calls.push("literal".to_owned());
-				Ok::<(), CommandError>(())
-			})),
-			Argument::<"value", _, _>::new(
-				BoolParser,
-				Exec::new(|ctx: &mut TestCtx, value: bool| {
-					ctx.calls.push(format!("argument:{value}"));
-					Ok::<(), CommandError>(())
-				}),
-			),
-		)));
-		let mut ctx = TestCtx::default();
-
-		command.execute(&mut ctx, "server true").unwrap();
-
-		assert_eq!(ctx.calls, ["literal"]);
-	}
-
-	#[test]
-	fn invalid_argument_after_matching_prefix_is_not_masked() {
-		let command = Root::new(Literal::<"server", _>::new(Literal::<"ban", _>::new(Argument::<"value", _, _>::new(
-			I32Parser,
-			Exec::new(|_ctx: &mut TestCtx, _value: i32| Ok::<(), CommandError>(())),
-		))));
-
-		let err = command.execute(&mut TestCtx::default(), "server ban nope").unwrap_err();
-
-		assert!(matches!(
-			err,
-			CommandError::InvalidArgument { name: "value", value, .. } if value == "nope"
-		));
-	}
-
-	#[test]
-	fn input_completion_is_enforced() {
-		let command = server_command(|_ctx: &mut TestCtx| Ok::<(), CommandError>(()), |_ctx: &mut TestCtx, _player: String| Ok::<(), CommandError>(()));
-
-		assert_matches!(command.execute(&mut TestCtx::default(), ""), Err(CommandError::IncompleteCommand));
-		assert_matches!(command.execute(&mut TestCtx::default(), "server"), Err(CommandError::IncompleteCommand));
-		match command.execute(&mut TestCtx::default(), "server stop now") {
-			Err(CommandError::TrailingInput(token)) => assert_eq!(token, "now"),
-			_ => panic!("Expected TrailingInput error"),
-		}
-	}
-
-	#[test]
-	fn bool_and_int_parser_errors_include_argument_name() {
-		let bool_command = Root::new(Literal::<"server", _>::new(Argument::<"value", _, _>::new(
-			BoolParser,
-			Exec::new(|_ctx: &mut TestCtx, _value: bool| Ok::<(), CommandError>(())),
-		)));
-		let int_command = Root::new(Literal::<"server", _>::new(Argument::<"value", _, _>::new(
-			I32Parser,
-			Exec::new(|_ctx: &mut TestCtx, _value: i32| Ok::<(), CommandError>(())),
-		)));
-
-		assert!(matches!(
-			bool_command.execute(&mut TestCtx::default(), "server maybe"),
-			Err(CommandError::InvalidArgument { name: "value", value, .. }) if value == "maybe"
-		));
-		assert!(matches!(
-			int_command.execute(&mut TestCtx::default(), "server 1.5"),
-			Err(CommandError::InvalidArgument { name: "value", value, .. }) if value == "1.5"
-		));
-	}
+/// A trait for nodes that can be written to a buffer.
+///
+/// This is used as an alternative to the stdlib's Display, which needs &self to write when we can operate directly on the type itself.
+pub trait WriteNode {
+	fn write_node<Buf>(buf: &mut Buf) -> core::fmt::Result
+	where
+		Buf: Write;
 }

@@ -22,7 +22,7 @@ pub trait ArgParser {
 	fn parse(&self, input: &str) -> Result<Self::Output, Self::Error>;
 }
 
-#[cfg_attr(not(feature = "const"), derive(Default))]
+#[derive(Default)]
 #[cfg_attr(feature = "const", derive(ConstDefault))]
 pub struct StringParser;
 
@@ -30,6 +30,7 @@ impl ArgParser for StringParser {
 	type Output = String;
 	type Error = Infallible;
 
+	#[inline(always)]
 	fn parse(&self, input: &str) -> Result<Self::Output, Self::Error> {
 		Ok(input.to_owned())
 	}
@@ -38,7 +39,7 @@ impl ArgParser for StringParser {
 macro_rules! impl_int_parser {
     ($($ty:ty => $name:ident),* $(,)?) => {
         $(
-            #[cfg_attr(not(feature = "const"), derive(Default))]
+            #[derive(Default)]
 			#[cfg_attr(feature = "const", derive(ConstDefault))]
             pub struct $name;
 
@@ -46,6 +47,7 @@ macro_rules! impl_int_parser {
                 type Output = $ty;
                 type Error = ParseError;
 
+                #[inline(always)]
                 fn parse(&self, input: &str) -> Result<Self::Output, Self::Error> {
                     input.parse().map_err(ParseError::ParseIntError)
                 }
@@ -68,7 +70,7 @@ impl_int_parser!(
 macro_rules! impl_float_parser {
     ($($ty:ty => $name:ident),* $(,)?) => {
         $(
-            #[cfg_attr(not(feature = "const"), derive(Default))]
+            #[derive(Default)]
 			#[cfg_attr(feature = "const", derive(ConstDefault))]
             pub struct $name;
 
@@ -76,6 +78,7 @@ macro_rules! impl_float_parser {
                 type Output = $ty;
                 type Error = ParseError;
 
+                #[inline(always)]
                 fn parse(&self, input: &str) -> Result<Self::Output, Self::Error> {
                     input.parse().map_err(ParseError::ParseFloatError)
                 }
@@ -89,7 +92,7 @@ impl_float_parser!(
 	f64 => F64Parser,
 );
 
-#[cfg_attr(not(feature = "const"), derive(Default))]
+#[derive(Default)]
 #[cfg_attr(feature = "const", derive(ConstDefault))]
 pub struct BoolParser;
 
@@ -97,6 +100,7 @@ impl ArgParser for BoolParser {
 	type Output = bool;
 	type Error = ParseError;
 
+	#[inline(always)]
 	fn parse(&self, input: &str) -> Result<Self::Output, Self::Error> {
 		match input {
 			"true" => Ok(true),

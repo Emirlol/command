@@ -37,6 +37,7 @@ macro_rules! command_error {
 }
 
 /// More lightweight errors that aren't fully initialized `CommandError`s, but can be converted into them with the help of the input source.
+#[derive(Debug)]
 pub enum RecoverableError {
 	UnknownCommand { offset: usize },
 	InvalidArgument { name: &'static str, offset: usize, error: String },
@@ -95,6 +96,7 @@ pub enum InputError {
 	InvalidUtf8(OsString),
 }
 
+#[derive(Debug)]
 pub enum DispatchError<Stack> {
 	Recoverable(RecoverableError, Stack),
 	Fatal(CommandError),
