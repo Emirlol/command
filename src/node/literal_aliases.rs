@@ -1,10 +1,16 @@
-use crate::{CommandError, Input, InputSource};
-use crate::error::DispatchError;
-use crate::node::dispatch_node::DispatchNode;
+use crate::{
+	DispatchNode,
+	Input,
+	InputSource,
+	error::{
+		DispatchError,
+		RecoverableError,
+	},
+};
 
 /// A literal node that can have match multiple string literals.
-/// 
-/// The main use case is to not replicate children nodes in the command tree by creating a graph that consists of 1-n-1 layers instead of 1-n-n. 
+///
+/// The main use case is to not replicate children nodes in the command tree by creating a graph that consists of 1-n-1 layers instead of 1-n-n.
 pub struct LiteralAliases<const NAMES: &'static [&'static str], Children> {
 	children: Children,
 }
@@ -27,16 +33,13 @@ where
 	Children: DispatchNode<Ctx, Stack, Source>,
 {
 	fn dispatch(&self, ctx: &mut Ctx, input: &mut Input<Source>, stack: Stack) -> Result<(), DispatchError<Stack>> {
-		let checkpoint = input.checkpoint();
-
 		match input.next_token() {
-			Some(token) if NAMES.iter().any(|name| token == *name) => self.children.dispatch(ctx, input, stack).map_err(DispatchError::into_fatal),
-			Some(token) => {
-				let token = token.to_owned(); // Drop the mutable reference to input to allow restoring the checkpoint, otherwise it would be a double mutable borrow of input.
-				input.restore(checkpoint);
-				Err(DispatchError::Recoverable(CommandError::UnknownCommand(token), stack))
+			Some(token) if NAMES.iter().any(|name| token == *name) => {
+				input.advance(1);
+				self.children.dispatch(ctx, input, stack).map_err(|e| e.into_fatal(input))
 			}
-			None => Err(DispatchError::Recoverable(CommandError::IncompleteCommand, stack)),
+			Some(_) => Err(DispatchError::Recoverable(RecoverableError::UnknownCommand { offset: input.offset }, stack)),
+			None => Err(DispatchError::Recoverable(RecoverableError::IncompleteCommand, stack)),
 		}
 	}
 }

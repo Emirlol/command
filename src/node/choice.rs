@@ -1,8 +1,8 @@
 use crate::{
+	DispatchNode,
 	Input,
 	InputSource,
 	error::DispatchError,
-	node::dispatch_node::DispatchNode,
 };
 
 /// A node that has 2 child nodes.
@@ -32,14 +32,10 @@ where
 	Tail: DispatchNode<Ctx, Stack, Source>,
 {
 	fn dispatch(&self, ctx: &mut Ctx, input: &mut Input<Source>, stack: Stack) -> Result<(), DispatchError<Stack>> {
-		let checkpoint = input.checkpoint();
 		match self.head.dispatch(ctx, input, stack) {
 			Ok(()) => Ok(()),
+			Err(DispatchError::Recoverable(_, stack)) => self.tail.dispatch(ctx, input, stack),
 			Err(DispatchError::Fatal(error)) => Err(DispatchError::Fatal(error)),
-			Err(DispatchError::Recoverable(_, stack)) => {
-				input.restore(checkpoint);
-				self.tail.dispatch(ctx, input, stack)
-			}
 		}
 	}
 }

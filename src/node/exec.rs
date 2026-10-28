@@ -1,6 +1,14 @@
-use crate::{CommandError, Executor, Input, InputSource};
-use crate::error::{DispatchError, IntoDispatchError};
-use crate::node::dispatch_node::DispatchNode;
+use crate::{
+	CommandError,
+	DispatchNode,
+	Executor,
+	Input,
+	InputSource,
+	error::{
+		DispatchError,
+		IntoDispatchError,
+	},
+};
 
 /// A terminal node that executes a function.
 pub struct Exec<F> {

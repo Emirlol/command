@@ -1,8 +1,8 @@
 use crate::{
+	DispatchNode,
 	Input,
 	InputSource,
 	error::DispatchError,
-	node::dispatch_node::DispatchNode,
 };
 
 /// A non-terminal node that can have 2 children:

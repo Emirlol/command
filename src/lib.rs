@@ -2,6 +2,8 @@
 #![feature(adt_const_params, unsized_const_params, min_specialization)]
 //! Statically-typed command tree library.
 
+extern crate core;
+
 mod args;
 mod error;
 mod input;

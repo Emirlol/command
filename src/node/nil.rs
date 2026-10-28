@@ -1,6 +1,12 @@
-use crate::{CommandError, Input, InputSource};
-use crate::error::DispatchError;
-use crate::node::dispatch_node::DispatchNode;
+use crate::{
+	DispatchNode,
+	Input,
+	InputSource,
+	error::{
+		DispatchError,
+		RecoverableError,
+	},
+};
 
 /// A no-op terminal node.
 ///
@@ -12,11 +18,11 @@ impl<Ctx, Stack, Source> DispatchNode<Ctx, Stack, Source> for Nil
 where
 	Source: InputSource,
 {
-	fn dispatch(&self, _ctx: &mut Ctx, input: &mut Input<Source>, _stack: Stack) -> Result<(), DispatchError<Stack>> {
-		if let Some(tokens) = input.remaining_tokens() {
-			Err(DispatchError::Recoverable(CommandError::UnknownCommand(tokens.join(" ")), _stack))
+	fn dispatch(&self, _ctx: &mut Ctx, input: &mut Input<Source>, stack: Stack) -> Result<(), DispatchError<Stack>> {
+		if input.has_remaining() {
+			Err(DispatchError::Recoverable(RecoverableError::UnknownCommand { offset: input.offset }, stack))
 		} else {
-			Err(DispatchError::Recoverable(CommandError::IncompleteCommand, _stack))
+			Err(DispatchError::Recoverable(RecoverableError::IncompleteCommand, stack))
 		}
 	}
 }

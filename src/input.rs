@@ -7,19 +7,25 @@ use crate::error::InputError;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Checkpoint {
-	offset: usize,
+	pub offset: usize,
 }
 
 /// Command input from a source of tokens.
 #[derive(Debug)]
-pub struct Input<S> {
-	source: S,
-	offset: usize,
+pub struct Input<Source>
+where
+	Source: InputSource,
+{
+	source: Source,
+	pub offset: usize,
 }
 
-impl<S: InputSource> Input<S> {
+impl<Source> Input<Source>
+where
+	Source: InputSource,
+{
 	#[inline(always)]
-	pub const fn new(source: S) -> Self {
+	pub const fn new(source: Source) -> Self {
 		Self { source, offset: 0 }
 	}
 
@@ -41,11 +47,44 @@ impl<S: InputSource> Input<S> {
 		self.source.has_remaining(self.offset)
 	}
 
+	/// Returns the token at the given offset, or `None` if the offset is out of bounds.
+	#[inline(always)]
+	pub fn get(&self, offset: usize) -> Option<&str> {
+		self.source.get(offset)
+	}
+
+	/// Returns the next token in the input source, or `None` if there are no more tokens.
+	#[inline(always)]
+	pub fn peek<'a, 'b>(&'a self) -> Option<&'b str>
+	where
+		'a: 'b,
+	{
+		self.source.get(self.offset)
+	}
+
 	/// Returns the remaining tokens from the current offset, or `None` if there are no more tokens.
 	#[inline(always)]
 	pub fn remaining_tokens(&self) -> Option<Vec<&str>> {
+		self.remaining_tokens_at(self.offset)
+	}
+
+	/// Returns the remaining tokens from the given offset, or `None` if there are no more tokens.
+	#[inline(always)]
+	pub fn remaining_tokens_at(&self, offset: usize) -> Option<Vec<&str>> {
 		// The impl is left to the source, as the source may have more efficient ways to get the remaining rather than just iterating over offset..len and calling get on each
-		self.source.remaining_tokens(self.offset)
+		self.source.remaining_tokens(offset)
+	}
+
+	/// Returns the number of tokens in the input source.
+	#[inline(always)]
+	pub fn len(&self) -> usize {
+		self.source.len()
+	}
+
+	/// Advances the current offset by the given count.
+	#[inline(always)]
+	pub fn advance(&mut self, count: usize) {
+		self.offset += count;
 	}
 
 	/// Advances the offset and returns the next token, or `None` if there are no more tokens.

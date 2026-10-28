@@ -31,7 +31,8 @@ impl<Children> Root<Children> {
 		let mut input = Input::new(input.into_input_source()?);
 		match self.children.dispatch(ctx, &mut input, ()) {
 			Ok(()) => Ok(()),
-			Err(DispatchError::Recoverable(error, _) | DispatchError::Fatal(error)) => Err(error),
+			Err(DispatchError::Recoverable(error, _)) => Err(error.into_command_error(&input)),
+			Err(DispatchError::Fatal(error)) => Err(error),
 		}
 	}
 

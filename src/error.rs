@@ -1,5 +1,10 @@
 use std::ffi::OsString;
 
+use crate::{
+	Input,
+	InputSource,
+};
+
 #[derive(Debug, thiserror::Error)]
 pub enum CommandError {
 	// Internal errors
@@ -31,6 +36,59 @@ macro_rules! command_error {
     };
 }
 
+/// More lightweight errors that aren't fully initialized `CommandError`s, but can be converted into them with the help of the input source.
+pub enum RecoverableError {
+	UnknownCommand { offset: usize },
+	InvalidArgument { name: &'static str, offset: usize, error: String },
+	IncompleteCommand,
+	TrailingInput { offset: usize },
+}
+
+impl RecoverableError {
+	pub fn into_command_error<Source>(self, input: &Input<Source>) -> CommandError
+	where
+		Source: InputSource,
+	{
+		match self {
+			RecoverableError::UnknownCommand { offset } => {
+				let Some(token) = input.get(offset) else {
+					unreachable!(
+						"Offset {} is out of bounds for input `{}`",
+						offset,
+						input.remaining_tokens_at(offset).map(|tokens| tokens.join(" ")).unwrap_or_default()
+					);
+				};
+				CommandError::UnknownCommand(token.to_string())
+			}
+			RecoverableError::InvalidArgument { name, offset, error } => {
+				let Some(token) = input.get(offset) else {
+					unreachable!(
+						"Offset {} is out of bounds for input `{}`",
+						offset,
+						input.remaining_tokens_at(offset).map(|tokens| tokens.join(" ")).unwrap_or_default()
+					);
+				};
+				CommandError::InvalidArgument {
+					name,
+					value: token.to_string(),
+					reason: error.to_string(),
+				}
+			}
+			RecoverableError::IncompleteCommand => CommandError::IncompleteCommand,
+			RecoverableError::TrailingInput { offset } => {
+				let Some(token) = input.get(offset) else {
+					unreachable!(
+						"Offset {} is out of bounds for input `{}`",
+						offset,
+						input.remaining_tokens_at(offset).map(|tokens| tokens.join(" ")).unwrap_or_default()
+					);
+				};
+				CommandError::TrailingInput(token.to_string())
+			}
+		}
+	}
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum InputError {
 	#[error("Invalid UTF-8 input: {0:?}")]
@@ -38,8 +96,30 @@ pub enum InputError {
 }
 
 pub enum DispatchError<Stack> {
-	Recoverable(CommandError, Stack),
+	Recoverable(RecoverableError, Stack),
 	Fatal(CommandError),
+}
+
+impl<Stack> DispatchError<Stack> {
+	pub fn into_fatal<Source>(self, input: &Input<Source>) -> DispatchError<Stack>
+	where
+		Source: InputSource,
+	{
+		match self {
+			DispatchError::Recoverable(error, _) => DispatchError::Fatal(error.into_command_error(input)),
+			DispatchError::Fatal(error) => DispatchError::Fatal(error),
+		}
+	}
+
+	pub fn into_fatal_for_parent<Source, ParentStack>(self, input: &Input<Source>) -> DispatchError<ParentStack>
+	where
+		Source: InputSource,
+	{
+		match self {
+			DispatchError::Recoverable(error, _) => DispatchError::Fatal(error.into_command_error(input)),
+			DispatchError::Fatal(error) => DispatchError::Fatal(error),
+		}
+	}
 }
 
 pub trait IntoDispatchError {

@@ -2,11 +2,13 @@ use std::fmt::Display;
 
 use crate::{
 	ArgParser,
-	CommandError,
+	DispatchNode,
 	Input,
 	InputSource,
-	error::DispatchError,
-	node::dispatch_node::DispatchNode,
+	error::{
+		DispatchError,
+		RecoverableError,
+	},
 };
 
 pub struct Argument<const NAME: &'static str, Parser, Children> {
@@ -34,26 +36,23 @@ where
 	Children: DispatchNode<Ctx, (Parser::Output, Stack), Source>,
 {
 	fn dispatch(&self, ctx: &mut Ctx, input: &mut Input<Source>, stack: Stack) -> Result<(), DispatchError<Stack>> {
-		let checkpoint = input.checkpoint();
-		let Some(token) = input.next_token() else {
-			return Err(DispatchError::Recoverable(CommandError::IncompleteCommand, stack));
+		let Some(token) = input.peek() else {
+			return Err(DispatchError::Recoverable(RecoverableError::IncompleteCommand, stack));
 		};
 
 		match self.parser.parse(token) {
-			Ok(value) => self.children.dispatch(ctx, input, (value, stack)).map_err(DispatchError::into_fatal_for_parent),
-			Err(error) => {
-				// Drop the mutable reference to input to allow restoring the checkpoint, otherwise it would be a double mutable borrow of input.
-				let token = token.to_owned();
-				input.restore(checkpoint);
-				Err(DispatchError::Recoverable(
-					CommandError::InvalidArgument {
-						name: NAME,
-						value: token,
-						reason: error.to_string(),
-					},
-					stack,
-				))
+			Ok(value) => {
+				input.advance(1);
+				self.children.dispatch(ctx, input, (value, stack)).map_err(|e| e.into_fatal_for_parent(input))
 			}
+			Err(error) => Err(DispatchError::Recoverable(
+				RecoverableError::InvalidArgument {
+					name: NAME,
+					offset: input.offset,
+					error: error.to_string(),
+				},
+				stack,
+			)),
 		}
 	}
 }

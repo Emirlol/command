@@ -1,6 +1,12 @@
-use crate::{CommandError, Input, InputSource};
-use crate::error::DispatchError;
-use crate::node::dispatch_node::DispatchNode;
+use crate::{
+	DispatchNode,
+	Input,
+	InputSource,
+	error::{
+		DispatchError,
+		RecoverableError,
+	},
+};
 
 /// A literal node, matched by a single string literal.
 pub struct Literal<const NAME: &'static str, Children> {
@@ -25,15 +31,16 @@ where
 	Children: DispatchNode<Ctx, Stack, Source>,
 {
 	fn dispatch(&self, ctx: &mut Ctx, input: &mut Input<Source>, stack: Stack) -> Result<(), DispatchError<Stack>> {
-		let checkpoint = input.checkpoint();
-		match input.next_token() {
-			Some(token) if token == NAME => self.children.dispatch(ctx, input, stack).map_err(DispatchError::into_fatal),
-			Some(token) => {
-				let token = token.to_owned(); // Drop the mutable reference to input to allow restoring the checkpoint, otherwise it would be a double mutable borrow of input.
-				input.restore(checkpoint);
-				Err(DispatchError::Recoverable(CommandError::UnknownCommand(token), stack))
+		match input.peek() {
+			Some(token) if token == NAME => {
+				input.advance(1);
+				self.children.dispatch(ctx, input, stack).map_err(|e| match e {
+					DispatchError::Recoverable(error, _) => DispatchError::Fatal(error.into_command_error(input)),
+					DispatchError::Fatal(error) => DispatchError::Fatal(error),
+				})
 			}
-			None => Err(DispatchError::Recoverable(CommandError::IncompleteCommand, stack)),
+			Some(_) => Err(DispatchError::Recoverable(RecoverableError::UnknownCommand { offset: input.offset }, stack)),
+			None => Err(DispatchError::Recoverable(RecoverableError::IncompleteCommand, stack)),
 		}
 	}
 }

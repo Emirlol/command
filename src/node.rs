@@ -14,30 +14,27 @@ mod nil;
 pub use nil::*;
 mod choice;
 pub use choice::*;
-mod dispatch_node;
-pub use dispatch_node::*;
 
-use crate::error::DispatchError;
+use crate::{
+	Input,
+	InputSource,
+	error::DispatchError,
+};
 
 pub trait Executor<Ctx, Stack> {
 	type Error: std::error::Error + Send + Sync;
 	fn run(&self, ctx: &mut Ctx, stack: Stack) -> Result<(), Self::Error>;
 }
 
-impl<Stack> DispatchError<Stack> {
-	#[inline(always)]
-	fn into_fatal(self) -> DispatchError<Stack> {
-		match self {
-			Self::Recoverable(error, _) | Self::Fatal(error) => DispatchError::Fatal(error),
-		}
-	}
-
-	#[inline(always)]
-	fn into_fatal_for_parent<ParentStack>(self) -> DispatchError<ParentStack> {
-		match self {
-			Self::Recoverable(error, _) | Self::Fatal(error) => DispatchError::Fatal(error),
-		}
-	}
+/// A node that can dispatch commands based on the input.
+///
+/// This is used for navigating the command tree.
+pub trait DispatchNode<Ctx, Stack, Source>
+where
+	Source: InputSource,
+{
+	/// Dispatches the command based on the input and the current context.
+	fn dispatch(&self, ctx: &mut Ctx, input: &mut Input<Source>, stack: Stack) -> Result<(), DispatchError<Stack>>;
 }
 
 internal_macros::impl_executor!(25); // Support stacks up to 25 deep -- this means there can be up to 25 consecutive argument nodes in a command. If this is not enough, you're doing something weird.
