@@ -16,7 +16,11 @@ use command::{
 	StringParser,
 };
 
-fn assert_dispatch(input: impl IntoInputSource) {
+fn assert_dispatch<I>(input: I)
+where
+	I: IntoInputSource,
+	CommandError: From<I::Error>,
+{
 	let command = Root::new(Choice::new(
 		Literal::<"stop", _>::new(Nil),
 		Literal::<"echo", _>::new(Argument::<"value", _, _>::new(
@@ -88,7 +92,11 @@ fn failed_argument_parser_restores_token_for_next_branch() {
 	assert_eq!(calls, ["hello world"]);
 }
 
-fn assert_empty(input: impl IntoInputSource) {
+fn assert_empty<I>(input: I)
+where
+	I: IntoInputSource,
+	CommandError: From<I::Error>,
+{
 	let command = Root::new(Nil);
 	assert!(matches!(command.execute_no_context(input), Err(CommandError::IncompleteCommand)));
 }

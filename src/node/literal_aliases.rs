@@ -1,4 +1,7 @@
-use std::fmt::Write;
+use std::{
+	borrow::Cow,
+	fmt::Write,
+};
 
 use crate::{
 	DispatchError,
@@ -14,6 +17,7 @@ use crate::{
 	NodeInspector,
 	NodeMetadata,
 	RecoverableError,
+	SuggestibleNode,
 	WriteNode,
 };
 
@@ -95,6 +99,43 @@ where
 			None => {
 				inspector.inspect::<Self>()?;
 				<<Children as NodeMetadata>::Kind as InspectMissingChild<Children, Source>>::inspect_missing(&self.children, inspector, input)
+			}
+		}
+	}
+}
+
+#[cfg(not(feature = "async-suggestions"))]
+impl<Ctx, const NAMES: &'static [&'static str], Children, const DESCRIPTION: &'static str> SuggestibleNode<Ctx> for LiteralAliases<NAMES, Children, DESCRIPTION>
+where
+	Children: SuggestibleNode<Ctx>,
+{
+	#[inline(always)]
+	fn suggest<'c>(&'c self, context: &'c Ctx, completed: &[&str], prefix: &str, output: &mut Vec<Cow<'c, str>>) {
+		if let Some((token, rest)) = completed.split_first() {
+			if NAMES.contains(token) {
+				self.children.suggest(context, rest, prefix, output);
+			}
+		} else {
+			output.extend(NAMES.iter().filter(|name| name.starts_with(prefix)).map(|name| Cow::Borrowed(*name)));
+		}
+	}
+}
+
+#[cfg(feature = "async-suggestions")]
+impl<Ctx, const NAMES: &'static [&'static str], Children, const DESCRIPTION: &'static str> SuggestibleNode<Ctx> for LiteralAliases<NAMES, Children, DESCRIPTION>
+where
+	Children: SuggestibleNode<Ctx>,
+	Ctx: Sync,
+{
+	#[inline(always)]
+	fn suggest<'c>(&'c self, context: &'c Ctx, completed: &[&str], prefix: &str, output: &mut Vec<Cow<'c, str>>) -> impl Future<Output = ()> + Send {
+		async move {
+			if let Some((token, rest)) = completed.split_first() {
+				if NAMES.contains(token) {
+					self.children.suggest(context, rest, prefix, output).await;
+				}
+			} else {
+				output.extend(NAMES.iter().filter(|name| name.starts_with(prefix)).map(|name| Cow::Borrowed(*name)));
 			}
 		}
 	}

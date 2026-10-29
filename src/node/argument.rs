@@ -1,6 +1,9 @@
-use std::fmt::{
-	Display,
-	Write,
+use std::{
+	borrow::Cow,
+	fmt::{
+		Display,
+		Write,
+	},
 };
 
 use crate::{
@@ -14,19 +17,23 @@ use crate::{
 	InspectMissingChild,
 	InspectableNode,
 	InspectionError,
+	NoSuggestions,
 	NodeInspector,
 	NodeKind,
 	NodeMetadata,
 	RecoverableError,
+	SuggestibleNode,
+	SuggestionProvider,
 	WriteNode,
 };
 
-pub struct Argument<const NAME: &'static str, Parser, Children, const DESCRIPTION: &'static str = ""> {
+pub struct Argument<const NAME: &'static str, Parser, Children, const DESCRIPTION: &'static str = "", Suggester = NoSuggestions> {
 	parser: Parser,
 	children: Children,
+	suggester: Suggester,
 }
 
-impl<const NAME: &'static str, Parser, Children, const DESCRIPTION: &'static str> WriteNode for Argument<NAME, Parser, Children, DESCRIPTION>
+impl<const NAME: &'static str, Parser, Children, const DESCRIPTION: &'static str, Suggester> WriteNode for Argument<NAME, Parser, Children, DESCRIPTION, Suggester>
 where
 	Parser: ArgParser,
 {
@@ -42,21 +49,33 @@ where
 	}
 }
 
-const impl<const NAME: &'static str, Parser, Children, const DESCRIPTION: &'static str> Argument<NAME, Parser, Children, DESCRIPTION> {
+const impl<const NAME: &'static str, Parser, Children, const DESCRIPTION: &'static str> Argument<NAME, Parser, Children, DESCRIPTION, NoSuggestions> {
 	#[inline(always)]
 	pub fn new(parser: Parser, children: Children) -> Self {
-		Self { parser, children }
+		Self {
+			parser,
+			children,
+			suggester: NoSuggestions,
+		}
 	}
 }
 
-const impl<const NAME: &'static str, Parser, Children, const DESCRIPTION: &'static str> Default for Argument<NAME, Parser, Children, DESCRIPTION>
+const impl<const NAME: &'static str, Parser, Children, const DESCRIPTION: &'static str, Suggester> Argument<NAME, Parser, Children, DESCRIPTION, Suggester> {
+	#[inline(always)]
+	pub fn with_suggestions(parser: Parser, children: Children, suggester: Suggester) -> Self {
+		Self { parser, children, suggester }
+	}
+}
+
+const impl<const NAME: &'static str, Parser, Children, const DESCRIPTION: &'static str, Suggester> Default for Argument<NAME, Parser, Children, DESCRIPTION, Suggester>
 where
 	Parser: [const] Default,
 	Children: [const] Default,
+	Suggester: [const] Default,
 {
 	#[inline(always)]
 	fn default() -> Self {
-		Self::new(Parser::default(), Children::default())
+		Self::with_suggestions(Parser::default(), Children::default(), Suggester::default())
 	}
 }
 
@@ -65,7 +84,7 @@ pub struct ArgumentKind;
 
 impl NodeKind for ArgumentKind {}
 
-impl<const NAME: &'static str, Parser, Children, const DESCRIPTION: &'static str> NodeMetadata for Argument<NAME, Parser, Children, DESCRIPTION>
+impl<const NAME: &'static str, Parser, Children, const DESCRIPTION: &'static str, Suggester> NodeMetadata for Argument<NAME, Parser, Children, DESCRIPTION, Suggester>
 where
 	Parser: ArgParser,
 {
@@ -84,7 +103,8 @@ where
 	}
 }
 
-impl<Ctx, Stack, Source, const NAME: &'static str, Parser, Children, const DESCRIPTION: &'static str> ExecutableNode<Ctx, Stack, Source> for Argument<NAME, Parser, Children, DESCRIPTION>
+impl<Ctx, Stack, Source, const NAME: &'static str, Parser, Children, const DESCRIPTION: &'static str, Suggester> ExecutableNode<Ctx, Stack, Source>
+	for Argument<NAME, Parser, Children, DESCRIPTION, Suggester>
 where
 	Source: InputSource,
 	Parser: ArgParser,
@@ -114,7 +134,7 @@ where
 	}
 }
 
-impl<Source, const NAME: &'static str, Parser, Children, const DESCRIPTION: &'static str> InspectableNode<Source> for Argument<NAME, Parser, Children, DESCRIPTION>
+impl<Source, const NAME: &'static str, Parser, Children, const DESCRIPTION: &'static str, Suggester> InspectableNode<Source> for Argument<NAME, Parser, Children, DESCRIPTION, Suggester>
 where
 	Source: InputSource,
 	Parser: ArgParser,
@@ -139,6 +159,47 @@ where
 			Err(_) => {
 				// There was some input in this position, but it was invalid. We still want to inspect the argument node to show the user what was expected here.
 				inspector.inspect::<Self>()
+			}
+		}
+	}
+}
+
+#[cfg(not(feature = "async-suggestions"))]
+impl<Ctx, const NAME: &'static str, Parser, Children, const DESCRIPTION: &'static str, Suggester> SuggestibleNode<Ctx> for Argument<NAME, Parser, Children, DESCRIPTION, Suggester>
+where
+	Parser: ArgParser,
+	Children: SuggestibleNode<Ctx>,
+	Suggester: SuggestionProvider<Ctx>,
+{
+	#[inline(always)]
+	fn suggest<'c>(&'c self, context: &'c Ctx, completed: &[&str], prefix: &str, output: &mut Vec<Cow<'c, str>>) {
+		if let Some((token, rest)) = completed.split_first() {
+			if self.parser.parse(token).is_ok() {
+				self.children.suggest(context, rest, prefix, output);
+			}
+		} else {
+			output.extend(self.suggester.suggest(context, prefix));
+		}
+	}
+}
+
+#[cfg(feature = "async-suggestions")]
+impl<Ctx, const NAME: &'static str, Parser, Children, const DESCRIPTION: &'static str, Suggester> SuggestibleNode<Ctx> for Argument<NAME, Parser, Children, DESCRIPTION, Suggester>
+where
+	Parser: ArgParser + Sync,
+	Children: SuggestibleNode<Ctx>,
+	Suggester: SuggestionProvider<Ctx>,
+	Ctx: Sync,
+{
+	#[inline(always)]
+	fn suggest<'c>(&'c self, context: &'c Ctx, completed: &[&str], prefix: &str, output: &mut Vec<Cow<'c, str>>) -> impl Future<Output = ()> + Send {
+		async move {
+			if let Some((token, rest)) = completed.split_first() {
+				if self.parser.parse(token).is_ok() {
+					self.children.suggest(context, rest, prefix, output).await;
+				}
+			} else {
+				output.extend(self.suggester.suggest(context, prefix).await);
 			}
 		}
 	}

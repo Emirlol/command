@@ -11,6 +11,7 @@ use command::{
 	CommandError,
 	Exec,
 	InputError,
+	InputSource,
 	IntoInputSource,
 	Literal,
 	Root,
@@ -59,7 +60,12 @@ fn run(source: &str, case: &str, args: &[OsString]) {
 	assert!(output.status.success(), "{source}/{case} failed:\n{}", String::from_utf8_lossy(&output.stderr));
 }
 
-fn check(input: impl IntoInputSource) {
+fn check<Source, I>(input: I)
+where
+	I: IntoInputSource<Source = Source>,
+	CommandError: From<I::Error>,
+	Source: InputSource,
+{
 	let command = Root::new(Literal::<"echo", _>::new(Argument::<"first", _, _>::new(
 		StringParser,
 		Argument::<"second", _, _>::new(

@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use crate::{
 	BothInspect,
 	CombineInspect,
@@ -11,6 +13,7 @@ use crate::{
 	NodeInspector,
 	NodeMetadata,
 	NoneInspect,
+	SuggestibleNode,
 	TailInspect,
 };
 
@@ -158,6 +161,35 @@ where
 					_ => Err(InspectionError::IncompleteCommand),
 				}
 			}
+		}
+	}
+}
+
+#[cfg(not(feature = "async-suggestions"))]
+impl<Ctx, Head, Tail> SuggestibleNode<Ctx> for Choice<Head, Tail>
+where
+	Head: SuggestibleNode<Ctx>,
+	Tail: SuggestibleNode<Ctx>,
+{
+	#[inline(always)]
+	fn suggest<'c>(&'c self, context: &'c Ctx, completed: &[&str], prefix: &str, output: &mut Vec<Cow<'c, str>>) {
+		self.head.suggest(context, completed, prefix, output);
+		self.tail.suggest(context, completed, prefix, output);
+	}
+}
+
+#[cfg(feature = "async-suggestions")]
+impl<Ctx, Head, Tail> SuggestibleNode<Ctx> for Choice<Head, Tail>
+where
+	Head: SuggestibleNode<Ctx>,
+	Tail: SuggestibleNode<Ctx>,
+	Ctx: Sync,
+{
+	#[inline(always)]
+	fn suggest<'c>(&'c self, context: &'c Ctx, completed: &[&str], prefix: &str, output: &mut Vec<Cow<'c, str>>) -> impl Future<Output = ()> + Send {
+		async move {
+			self.head.suggest(context, completed, prefix, output).await;
+			self.tail.suggest(context, completed, prefix, output).await;
 		}
 	}
 }

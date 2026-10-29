@@ -3,7 +3,10 @@ use std::env::{
 	ArgsOs,
 };
 
-use crate::error::InputError;
+use crate::{
+	IntoDispatchError,
+	error::InputError,
+};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Checkpoint {
@@ -22,7 +25,7 @@ where
 
 const impl<Source> Input<Source>
 where
-	Source: InputSource,
+	Source: [const] InputSource,
 {
 	#[inline(always)]
 	pub fn new(source: Source) -> Self {
@@ -40,16 +43,17 @@ where
 	pub fn restore(&mut self, checkpoint: Checkpoint) {
 		self.offset = checkpoint.offset;
 	}
-}
 
-impl<Source> Input<Source>
-where
-	Source: InputSource,
-{
 	/// Returns whether there are remaining tokens in the input source from the current offset.
 	#[inline(always)]
 	pub fn has_remaining(&self) -> bool {
 		self.source.has_remaining(self.offset)
+	}
+
+	/// Returns whether the input source has no tokens. This is different from `has_remaining`, as it checks the entire input source, not just the range `[current_offset..]`.
+	#[inline(always)]
+	pub fn is_empty(&self) -> bool {
+		self.source.is_empty()
 	}
 
 	/// Returns the token at the given offset, or `None` if the offset is out of bounds.
@@ -103,11 +107,20 @@ where
 	}
 }
 
+pub const trait SourceType {}
+
+pub struct SliceLike;
+const impl SourceType for SliceLike {}
+pub struct Unknown;
+const impl SourceType for Unknown {}
+
 /// Represents a source of input for the command parser.
 /// The input source needs to allow for retrieving tokens at a given offset (random access) and the len of inputs.
 /// The input source impl may be the owner, or simply a reference to the underlying data.
 /// The input source is expected to be immutable, and the parser will maintain its own offset into the input source.
 pub const trait InputSource {
+	type Type: SourceType = Unknown;
+
 	/// Returns the token at the given offset, or `None` if the offset is out of bounds.
 	fn get(&self, offset: usize) -> Option<&str>;
 
@@ -137,6 +150,46 @@ pub const trait InputSource {
 	}
 }
 
+/// Represents an input source that can be converted into a slice of string slices (`&[&str]`).
+/// This is mainly for optimization purposes in suggestions, as it allows the parser to work with a slice of string slices directly, rather than having to construct an iterator and collect into a vec to have access to a range of tokens.
+///
+/// Since most of the default InputSources use a Vec or slice of `&str`, this trait is implemented for those types. String-based input sources have to go through the default iterator-based impl.
+pub const trait SliceInputSource: InputSource<Type = SliceLike> {
+	fn as_slice(&self) -> &[&str];
+}
+
+const impl SliceInputSource for [&str] {
+	#[inline(always)]
+	fn as_slice(&self) -> &[&str] {
+		&self
+	}
+}
+
+const impl SliceInputSource for Vec<&str> {
+	#[inline(always)]
+	fn as_slice(&self) -> &[&str] {
+		self.as_slice()
+	}
+}
+
+const impl<const N: usize> SliceInputSource for [&str; N] {
+	#[inline(always)]
+	fn as_slice(&self) -> &[&str] {
+		self.as_slice()
+	}
+}
+
+// Reference impl
+const impl<T> SliceInputSource for &T
+where
+	T: [const] SliceInputSource,
+{
+	#[inline(always)]
+	fn as_slice(&self) -> &[&str] {
+		(**self).as_slice()
+	}
+}
+
 // region InputSource impls
 const impl<T, const N: usize> InputSource for [T; N]
 where
@@ -144,6 +197,8 @@ where
 	for<'a> &'a [T]: [const] IntoIterator<Item = &'a T>,
 	for<'a> <&'a [T] as IntoIterator>::IntoIter: [const] Iterator,
 {
+	type Type = SliceLike;
+
 	#[inline(always)]
 	fn get(&self, offset: usize) -> Option<&str> {
 		InputSource::get(self.as_slice(), offset)
@@ -166,6 +221,8 @@ where
 	for<'a> &'a [T]: [const] IntoIterator<Item = &'a T>,
 	for<'a> <&'a [T] as IntoIterator>::IntoIter: [const] Iterator,
 {
+	type Type = SliceLike;
+
 	#[inline(always)]
 	fn get(&self, offset: usize) -> Option<&str> {
 		<[T]>::get(self, offset).map(AsRef::as_ref)
@@ -195,6 +252,8 @@ where
 	for<'a> &'a [T]: [const] IntoIterator<Item = &'a T>,
 	for<'a> <&'a [T] as IntoIterator>::IntoIter: [const] Iterator,
 {
+	type Type = SliceLike;
+
 	#[inline(always)]
 	fn get(&self, offset: usize) -> Option<&str> {
 		InputSource::get(self.as_slice(), offset)
@@ -216,6 +275,8 @@ const impl<T> InputSource for &T
 where
 	T: [const] InputSource + ?Sized,
 {
+	type Type = T::Type;
+
 	#[inline(always)]
 	fn get(&self, offset: usize) -> Option<&str> {
 		(**self).get(offset)
@@ -241,8 +302,9 @@ where
 /// - **In the case of command-line arguments, the first argument is skipped as it is the application's name and not considered part of the command input.**
 pub const trait IntoInputSource {
 	type Source: [const] InputSource;
+	type Error: IntoDispatchError;
 
-	fn into_input_source(self) -> Result<Self::Source, InputError>;
+	fn into_input_source(self) -> Result<Self::Source, Self::Error>;
 }
 
 // region  IntoInputSource impls
@@ -250,18 +312,20 @@ pub const trait IntoInputSource {
 // Command-line argument impls
 impl IntoInputSource for Args {
 	type Source = Vec<String>;
+	type Error = !;
 
 	#[inline(always)]
-	fn into_input_source(self) -> Result<Vec<String>, InputError> {
+	fn into_input_source(self) -> Result<Vec<String>, Self::Error> {
 		Ok(self.skip(1).collect())
 	}
 }
 
 impl IntoInputSource for ArgsOs {
 	type Source = Vec<String>;
+	type Error = InputError;
 
 	#[inline(always)]
-	fn into_input_source(self) -> Result<Self::Source, InputError> {
+	fn into_input_source(self) -> Result<Self::Source, Self::Error> {
 		self.skip(1).map(|s| s.into_string().map_err(InputError::InvalidUtf8)).collect()
 	}
 }
@@ -269,9 +333,10 @@ impl IntoInputSource for ArgsOs {
 #[cfg(feature = "argv")]
 impl IntoInputSource for argv::Iter {
 	type Source = Vec<&'static str>;
+	type Error = InputError;
 
 	#[inline(always)]
-	fn into_input_source(self) -> Result<Self::Source, InputError> {
+	fn into_input_source(self) -> Result<Self::Source, Self::Error> {
 		self.skip(1).map(|s| s.to_str().ok_or_else(|| InputError::InvalidUtf8(s.to_owned()))).collect()
 	}
 }
@@ -279,25 +344,28 @@ impl IntoInputSource for argv::Iter {
 // Whitespace-splitting impls
 impl IntoInputSource for String {
 	type Source = Vec<String>;
+	type Error = !;
 
 	#[inline(always)]
-	fn into_input_source(self) -> Result<Vec<String>, InputError> {
+	fn into_input_source(self) -> Result<Vec<String>, Self::Error> {
 		Ok(self.split_whitespace().map(|s| s.to_string()).collect())
 	}
 }
 impl<'a> IntoInputSource for &'a String {
 	type Source = Vec<&'a str>;
+	type Error = !;
 
 	#[inline(always)]
-	fn into_input_source(self) -> Result<Self::Source, InputError> {
+	fn into_input_source(self) -> Result<Self::Source, Self::Error> {
 		Ok(self.split_whitespace().collect())
 	}
 }
 impl<'a> IntoInputSource for &'a str {
 	type Source = Vec<&'a str>;
+	type Error = !;
 
 	#[inline(always)]
-	fn into_input_source(self) -> Result<Self::Source, InputError> {
+	fn into_input_source(self) -> Result<Self::Source, Self::Error> {
 		Ok(self.split_whitespace().collect())
 	}
 }
@@ -308,9 +376,10 @@ where
 	T: InputSource,
 {
 	type Source = T;
+	type Error = !;
 
 	#[inline(always)]
-	fn into_input_source(self) -> Result<Self::Source, InputError> {
+	fn into_input_source(self) -> Result<Self::Source, Self::Error> {
 		Ok(self)
 	}
 }

@@ -37,9 +37,21 @@ clap = { version = "4", features = ["derive"] }
 name = "dispatch"
 harness = true
 
+[[bench]]
+name = "suggestions"
+harness = true
+
+[[bench]]
+name = "suggestions_async"
+harness = true
+required-features = ["async-suggestions"]
+
 [features]
 ## Adds ANSI styling to help output. Disabled by default; when enabled, help strings include ANSI escape codes.
 ansi = []
+
+## Enables asynchronous argument suggestion providers and asynchronous tree traversal during suggestions.
+async-suggestions = []
 
 ## Adds support for argv crate, which allows iterating over the command-line arguments via an `Iterator<Item = &'static OsStr>` implementation. This is mainly for convenience, as it allows you to put in `arv::iter()` as the command input, which will convert the OsStr references into str references for you. This will skip the first argument, which is the executable itself.
 argv = ["dep:argv"]

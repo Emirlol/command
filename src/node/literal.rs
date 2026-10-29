@@ -1,4 +1,7 @@
-use std::fmt::Write;
+use std::{
+	borrow::Cow,
+	fmt::Write,
+};
 
 use crate::{
 	DispatchError,
@@ -14,6 +17,7 @@ use crate::{
 	NodeKind,
 	NodeMetadata,
 	RecoverableError,
+	SuggestibleNode,
 	WriteNode,
 };
 
@@ -110,6 +114,43 @@ where
 			None => {
 				inspector.inspect::<Self>()?;
 				<<Children as NodeMetadata>::Kind as InspectMissingChild<Children, Source>>::inspect_missing(&self.children, inspector, input)
+			}
+		}
+	}
+}
+
+#[cfg(not(feature = "async-suggestions"))]
+impl<Ctx, const NAME: &'static str, Children, const DESCRIPTION: &'static str> SuggestibleNode<Ctx> for Literal<NAME, Children, DESCRIPTION>
+where
+	Children: SuggestibleNode<Ctx>,
+{
+	#[inline(always)]
+	fn suggest<'c>(&'c self, context: &'c Ctx, completed: &[&str], prefix: &str, output: &mut Vec<Cow<'c, str>>) {
+		if let Some((token, rest)) = completed.split_first() {
+			if *token == NAME {
+				self.children.suggest(context, rest, prefix, output);
+			}
+		} else if NAME.starts_with(prefix) {
+			output.push(Cow::Borrowed(NAME));
+		}
+	}
+}
+
+#[cfg(feature = "async-suggestions")]
+impl<Ctx, const NAME: &'static str, Children, const DESCRIPTION: &'static str> SuggestibleNode<Ctx> for Literal<NAME, Children, DESCRIPTION>
+where
+	Children: SuggestibleNode<Ctx>,
+	Ctx: Sync,
+{
+	#[inline(always)]
+	fn suggest<'c>(&'c self, context: &'c Ctx, completed: &[&str], prefix: &str, output: &mut Vec<Cow<'c, str>>) -> impl Future<Output = ()> + Send {
+		async move {
+			if let Some((token, rest)) = completed.split_first() {
+				if *token == NAME {
+					self.children.suggest(context, rest, prefix, output).await;
+				}
+			} else if NAME.starts_with(prefix) {
+				output.push(Cow::Borrowed(NAME));
 			}
 		}
 	}

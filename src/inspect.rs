@@ -3,6 +3,7 @@ use std::fmt::Write as _;
 
 use crate::{
 	Input,
+	InputError,
 	InputSource,
 	NodeMetadata,
 	WriteNode,
@@ -256,7 +257,14 @@ pub enum InspectionError {
 	#[error("Incomplete command")]
 	IncompleteCommand,
 	#[error(transparent)]
-	Input(#[from] crate::InputError),
+	Input(#[from] InputError),
+}
+
+impl From<!> for InspectionError {
+	#[inline(always)]
+	fn from(never: !) -> Self {
+		match never {}
+	}
 }
 
 impl InspectionError {

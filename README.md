@@ -6,7 +6,7 @@ This library is meant for command trees that will be fully defined at compile ti
 
 Every node in the tree is defined using the type system, starting from `Root`:
 
-```rust
+```rust,ignore
 let command: Root< // The root node with the convenience methods to execute and inspect the command tree
 	Choice< // A choice node, which will try to parse the input with the first child, and if it fails, will try the second child
 		Literal< // A literal node that will match a literal string input
@@ -67,7 +67,7 @@ This method has 2 parameters, a context and the string input to parse. The conte
 There are a few rules to the macro:
 
 - Each scope defines a node. There are two types of nodes: `literal` and `argument`.
-  - ```rust
+  - ```rust,ignore
     literal "name" {
         // children
     }
@@ -79,7 +79,7 @@ There are a few rules to the macro:
 - Each scope can optionally add an execution function with the `executes` keyword. This can be a closure expr or a function path. The expected method signature is `(&mut ContextType, {args*}) -> Result<(), {Any error type}>`.
   The args in a node will depend on the parent `argument` nodes in the execution path.
   Nodes that do not have executors can still parse inputs and delegate to the child nodes it has, but will return an `Err(CommandError::IncompleteCommand)` if it's called by itself without any trailing input or children.
-  - ```rust
+  - ```rust,ignore
     literal "name" {
         executes |context: &mut ContextType| {
             // ...
@@ -102,7 +102,7 @@ There are a few rules to the macro:
     }
     ```
 
-  - ```rust
+  - ```rust,ignore
     // Arguments are collected in a stack, passed onto the node that has the executor.
      argument "arg1": StringParser {
          executes |context: &mut ContextType, arg1: String| { // arg1 from this node's arguments will be fed to this executor after being parsed
@@ -118,7 +118,7 @@ There are a few rules to the macro:
     ```
 - Nodes may define descriptions for the help page with the `description` keyword. This is optional, and if not defined, `No description provided.` will be printed instead.
   - The description can be any expression that evaluates to a const &'static str. This includes string literals, `concat!` expressions, r#...# raw string literals, names of const variables, etc. Preferably, the description should be a single line.
-  - ```rust
+  - ```rust,ignore
     literal "name1" description "This is a description for the help page." {
         // ...
     }
@@ -155,7 +155,7 @@ Example command tree definitions can be found in [examples](./examples).
 
 If this kind of auto-help is not desired, you can use `Root::execute` to directly match and execute commands, or `Root::inspect` to get the help page for a specific command without executing it (without the `help` keyword).
 
-```rust
+```rust,ignore
 let help = command.inspect("")?;
 let command_help = command.inspect("user ban")?;
 ```
@@ -164,6 +164,34 @@ Use the returned `Some(help)` from `run` to print, transmit, or otherwise handle
 
 The help page includes a usage line, command descriptions, and positional arguments indented beneath the commands that take them. Enable the opt-in `ansi` feature to add ANSI styling. When enabled, escape codes are included in strings returned by `inspect`.
 
+## Suggestions
+
+`Root::suggest` completes one token after a slice of already completed tokens:
+
+```rust,ignore
+let candidates = command.suggest(&context, &["user"], "ad");
+```
+
+Literal names and aliases that start with the prefix are returned. 
+Argument nodes can use `Argument::with_suggestions(parser, children, provider)` or the macro's `suggestions ProviderExpression` clause to provide finite or context-dependent candidates. 
+The default `Argument::new` uses `NoSuggestions` which returns no candidates.
+Suggestion providers receive immutable application context for possible use in generating the suggestions (e.g., database queries, API calls, table lookups) and must not perform command side effects.
+
+By default, providers and traversal are synchronous. Enable the `async-suggestions` feature to use async providers and await `Root::suggest`.
+The caller is responsible for tokenization, cursor handling, and deciding how to display candidates.
+
+There are some convenience suggesters that are implemented for you to use, such as:
+- `ConstSuggester` which has a const slice of candidates, e.g. `ConstSuggestions::<{ &["one", "two", "three"] }> {}`.
+- `BoolSuggester` for `true`/`false` values (which is just `ConstSuggestions::<{ &["true", "false"] }> {}`).
+- `PathSuggester` for paths, which is strictly synchronous-only to not require a new dependency as `std::fs` is inherently synchronous. 
+  It uses `std::fs` to read the filesystem and return candidates that match the prefix.
+  Note that it has no filters or sanitization, so it will have access to the entire filesystem the executable has access to. 
+  Use with caution, and consider implementing your own `ArgParser` that wraps `PathSuggester` to filter or sanitize the results.
+  The same goes for async `PathSuggester` as well.
+
+If your use case is not covered, you can implement `SuggestionProvider` for your own suggestion provider. If you believe there's a very commonly-used suggestion provider but missing from the library, please open an issue.
+
 ## Features
-- `argv`: Adds support for argv crate, which allows iterating over the commandline arguments via an `Iterator<Item = &'static OsStr>` implementation. This is mainly for convenience, as it allows you to put in `arv::iter()` as the command input, which will convert the OsStr references into str references for you. This will skip the first argument, which is the executable itself.
+- `argv`: Adds support for argv crate, which allows iterating over the commandline arguments via an `Iterator<Item = &'static OsStr>` implementation. This is mainly for convenience, as it allows you to put in `argv::iter()` as the command input, which will convert the OsStr references into str references for you. This will skip the first argument, which is the executable itself.
 - `ansi`: Adds ANSI styling to generated help output. It is disabled by default and adds no dependency.
+- `async-suggestions`: Makes suggestion providers and `Root::suggest` asynchronous. Disabled by default as it's meant to be mutually exclusive with synchronous suggestion providers, which is the default.

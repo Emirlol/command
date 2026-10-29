@@ -17,14 +17,35 @@ pub enum CommandError {
 	#[error("Unexpected trailing input: '{0}'")]
 	TrailingInput(String),
 	#[error(transparent)]
-	InputError(#[from] InputError),
+	InputError(InputError),
 
 	// Meant for external use, this error can be returned instead of other types as a generic message return type.
 	#[error("Command execution failed: {0}")]
 	Execution(String),
 	// As an alternative to `Execution`, this error can be used to wrap any external error type.
 	#[error("Unknown error: {0:?}")]
-	External(#[from] Box<dyn std::error::Error + Send + Sync>),
+	External(Box<dyn std::error::Error + Send + Sync>),
+}
+
+impl From<InputError> for CommandError {
+	#[inline(always)]
+	fn from(error: InputError) -> Self {
+		CommandError::InputError(error)
+	}
+}
+
+impl From<Box<dyn std::error::Error + Send + Sync>> for CommandError {
+	#[inline(always)]
+	fn from(error: Box<dyn std::error::Error + Send + Sync>) -> Self {
+		CommandError::External(error)
+	}
+}
+
+impl From<!> for CommandError {
+	#[inline(always)]
+	fn from(never: !) -> Self {
+		match never {}
+	}
 }
 
 /// An alternative to `anyhow`'s `bail!` macro for use within command executors that uses the `CommandError` type for easier handling.

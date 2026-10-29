@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use crate::{
 	DispatchError,
 	ExecutableNode,
@@ -10,6 +12,7 @@ use crate::{
 	NodeMetadata,
 	NoneInspect,
 	RecoverableError,
+	SuggestibleNode,
 };
 
 /// A no-op terminal node.
@@ -51,5 +54,22 @@ impl<Source: InputSource> InspectableNode<Source> for Nil {
 		} else {
 			Err(InspectionError::IncompleteCommand)
 		}
+	}
+}
+
+#[cfg(not(feature = "async-suggestions"))]
+impl<Ctx> SuggestibleNode<Ctx> for Nil {
+	#[inline(always)]
+	fn suggest<'c>(&'c self, _context: &'c Ctx, _completed: &[&str], _prefix: &str, _output: &mut Vec<Cow<'c, str>>) {}
+}
+
+#[cfg(feature = "async-suggestions")]
+impl<Ctx> SuggestibleNode<Ctx> for Nil
+where
+	Ctx: Sync,
+{
+	#[inline(always)]
+	fn suggest<'c>(&'c self, _context: &'c Ctx, _completed: &[&str], _prefix: &str, _output: &mut Vec<Cow<'c, str>>) -> impl Future<Output = ()> + Send {
+		async {}
 	}
 }

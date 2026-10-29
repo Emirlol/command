@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use command::{
 	InspectionError,
 	NodeInspector,
@@ -15,6 +17,7 @@ use crate::{
 	IntoDispatchError,
 	NoInspectKind,
 	NoneInspect,
+	SuggestibleNode,
 };
 
 /// A terminal node that executes a function.
@@ -64,5 +67,23 @@ impl<Source: InputSource, F> InspectableNode<Source> for Exec<F> {
 	#[inline(always)]
 	fn inspect(&self, _inspector: &mut NodeInspector, _input: &mut Input<Source>) -> Result<(), InspectionError> {
 		Err(InspectionError::IncompleteCommand)
+	}
+}
+
+#[cfg(not(feature = "async-suggestions"))]
+impl<Ctx, F> SuggestibleNode<Ctx> for Exec<F> {
+	#[inline(always)]
+	fn suggest<'c>(&'c self, _context: &'c Ctx, _completed: &[&str], _prefix: &str, _output: &mut Vec<Cow<'c, str>>) {}
+}
+
+#[cfg(feature = "async-suggestions")]
+impl<Ctx, F> SuggestibleNode<Ctx> for Exec<F>
+where
+	Ctx: Sync,
+	F: Sync,
+{
+	#[inline(always)]
+	fn suggest<'c>(&'c self, _context: &'c Ctx, _completed: &[&str], _prefix: &str, _output: &mut Vec<Cow<'c, str>>) -> impl Future<Output = ()> + Send {
+		async {}
 	}
 }

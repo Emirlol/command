@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use crate::{
 	DispatchError,
 	ExecutableNode,
@@ -9,6 +11,7 @@ use crate::{
 	IntoDispatchError,
 	NodeInspector,
 	NodeMetadata,
+	SuggestibleNode,
 };
 
 /// A non-terminal node that can have 2 children:
@@ -80,5 +83,29 @@ where
 	#[inline(always)]
 	fn inspect(&self, inspector: &mut NodeInspector, input: &mut Input<Source>) -> Result<(), InspectionError> {
 		self.node.inspect(inspector, input)
+	}
+}
+
+#[cfg(not(feature = "async-suggestions"))]
+impl<Ctx, Node, F> SuggestibleNode<Ctx> for WithExec<Node, F>
+where
+	Node: SuggestibleNode<Ctx>,
+{
+	#[inline(always)]
+	fn suggest<'c>(&'c self, context: &'c Ctx, completed: &[&str], prefix: &str, output: &mut Vec<Cow<'c, str>>) {
+		self.node.suggest(context, completed, prefix, output);
+	}
+}
+
+#[cfg(feature = "async-suggestions")]
+impl<Ctx, Node, F> SuggestibleNode<Ctx> for WithExec<Node, F>
+where
+	Node: SuggestibleNode<Ctx> + Sync,
+	F: Sync,
+	Ctx: Sync,
+{
+	#[inline(always)]
+	fn suggest<'c>(&'c self, context: &'c Ctx, completed: &[&str], prefix: &str, output: &mut Vec<Cow<'c, str>>) -> impl Future<Output = ()> + Send {
+		self.node.suggest(context, completed, prefix, output)
 	}
 }

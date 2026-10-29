@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use crate::{
 	CommandError,
 	DispatchError,
@@ -8,6 +10,8 @@ use crate::{
 	InspectionError,
 	IntoInputSource,
 	NodeInspector,
+	SuggestDispatch,
+	SuggestibleNode,
 };
 
 /// The root of a command tree.
@@ -38,8 +42,10 @@ impl<Children> Root<Children> {
 	/// Normal command executors still control their own side effects and return `Ok(None)` here.
 	/// `run` itself does not write to stdout or stderr.
 	#[inline(always)]
-	pub fn run<Ctx, Source>(&self, ctx: &mut Ctx, input: impl IntoInputSource<Source = Source>) -> Result<Option<String>, CommandError>
+	pub fn run<Ctx, Source, I>(&self, ctx: &mut Ctx, input: I) -> Result<Option<String>, CommandError>
 	where
+		I: IntoInputSource<Source = Source>,
+		CommandError: From<I::Error>,
 		Source: InputSource,
 		Children: ExecutableNode<Ctx, (), Source> + InspectableNode<Source>,
 	{
@@ -70,8 +76,10 @@ impl<Children> Root<Children> {
 	///
 	/// See [IntoInputSource] for supported input types.
 	#[inline(always)]
-	pub fn execute<Ctx, Source>(&self, ctx: &mut Ctx, input: impl IntoInputSource<Source = Source>) -> Result<(), CommandError>
+	pub fn execute<Ctx, Source, I>(&self, ctx: &mut Ctx, input: I) -> Result<(), CommandError>
 	where
+		I: IntoInputSource<Source = Source>,
+		CommandError: From<I::Error>,
 		Source: InputSource,
 		Children: ExecutableNode<Ctx, (), Source>,
 	{
@@ -87,8 +95,10 @@ impl<Children> Root<Children> {
 	///
 	/// See [IntoInputSource] for supported input types.
 	#[inline(always)]
-	pub fn execute_no_context<Source>(&self, input: impl IntoInputSource<Source = Source>) -> Result<(), CommandError>
+	pub fn execute_no_context<Source, I>(&self, input: I) -> Result<(), CommandError>
 	where
+		I: IntoInputSource<Source = Source>,
+		CommandError: From<I::Error>,
 		Source: InputSource,
 		Children: ExecutableNode<(), (), Source>,
 	{
@@ -96,8 +106,10 @@ impl<Children> Root<Children> {
 	}
 
 	#[inline(always)]
-	pub fn inspect<Source>(&self, input: impl IntoInputSource<Source = Source>) -> Result<String, InspectionError>
+	pub fn inspect<Source, I>(&self, input: I) -> Result<String, InspectionError>
 	where
+		I: IntoInputSource<Source = Source>,
+		InspectionError: From<I::Error>,
 		Source: InputSource,
 		Children: InspectableNode<Source>,
 	{
@@ -107,6 +119,38 @@ impl<Children> Root<Children> {
 		self.children.inspect(&mut inspector, &mut input)?;
 		let path = input.remaining_tokens_at(0).map(|tokens| tokens.into_iter().collect::<Vec<_>>()).unwrap_or_default();
 		Ok(crate::inspect::format_help_output(&inspector.output, &path))
+	}
+
+	// The suggest methods are generic over the error of the IntoInputSource because that's the only possible error point.
+	// A suggestion failing just means there are no suggestions, so there are no errors created for that reason.
+	// If the `IntoInputSource` impl is infallible, inlining gives us the benefit of the result simply not being a thing, so it's basically a Vec<String> return type.
+	#[cfg(not(feature = "async-suggestions"))]
+	#[inline(always)]
+	pub fn suggest<'c, Ctx, Source, I>(&'c self, context: &'c Ctx, input: I) -> Result<Vec<Cow<'c, str>>, I::Error>
+	where
+		I: IntoInputSource<Source = Source>,
+		Source: InputSource,
+		Source::Type: SuggestDispatch<Source>,
+		Children: SuggestibleNode<Ctx>,
+	{
+		input.into_input_source().map(|s| <Source::Type as SuggestDispatch<Source>>::suggest(&s, context, &self.children))
+	}
+
+	#[cfg(feature = "async-suggestions")]
+	#[inline(always)]
+	pub async fn suggest<'c, Ctx, Source, I>(&'c self, context: &'c Ctx, input: I) -> Result<Vec<Cow<'c, str>>, I::Error>
+	where
+		I: IntoInputSource<Source = Source>,
+		Source: InputSource,
+		Source::Type: SuggestDispatch<Source>,
+		Ctx: Sync,
+		Children: SuggestibleNode<Ctx>,
+	{
+		// Can't use stupid .map because the borrow checker is too dumb to understand that the closure doesn't capture `source`.
+		match input.into_input_source() {
+			Ok(source) => Ok(<Source::Type as SuggestDispatch<Source>>::suggest(&source, context, &self.children).await),
+			Err(e) => Err(e),
+		}
 	}
 }
 

@@ -27,6 +27,7 @@ mod kw {
 	custom_keyword!(argument);
 	custom_keyword!(executes);
 	custom_keyword!(description);
+	custom_keyword!(suggestions);
 }
 
 const MAIN_CRATE_NAME: &str = "command";
@@ -142,6 +143,7 @@ enum CommandNode {
 	Argument {
 		name: LitStr,
 		description: Expr,
+		suggestions: Option<Expr>,
 		parser_type: syn::Type,
 		children: CommandTree,
 		executor: Option<Executor>,
@@ -215,11 +217,16 @@ impl Parse for CommandNode {
 			let _colon: Colon = input.parse()?;
 			let parser_type: syn::Type = input.parse()?;
 			let mut description: Option<Expr> = None;
+			let mut suggestions: Option<Expr> = None;
 			let mut executor: Option<Executor> = None;
 			let mut children: Vec<CommandNode> = Vec::new();
 			if input.peek(kw::description) {
 				let _description: kw::description = input.parse()?;
 				description = Some(input.parse()?);
+			}
+			if input.peek(kw::suggestions) {
+				let _: kw::suggestions = input.parse()?;
+				suggestions = Some(input.parse()?);
 			}
 			// not else if, we want to allow chaining
 			if input.peek(kw::executes) {
@@ -239,6 +246,12 @@ impl Parse for CommandNode {
 						let desc_content;
 						braced!(desc_content in content);
 						description = Some(desc_content.parse()?);
+					} else if content.peek(kw::suggestions) {
+						if suggestions.is_some() {
+							return Err(content.error("Multiple `suggestions` expressions are not allowed"));
+						}
+						let _: kw::suggestions = content.parse()?;
+						suggestions = Some(content.parse()?);
 					} else if content.peek(kw::executes) {
 						if executor.is_some() {
 							return Err(content.error("Multiple `executes` blocks are not allowed"));
@@ -260,6 +273,7 @@ impl Parse for CommandNode {
 			Ok(CommandNode::Argument {
 				name,
 				description: description.unwrap_or_else(|| syn::parse_quote! { "" }),
+				suggestions,
 				parser_type,
 				children,
 				executor,
@@ -303,22 +317,27 @@ impl ToTokens for CommandNode {
 			CommandNode::Argument {
 				name,
 				description,
+				suggestions,
 				parser_type,
 				children,
 				executor,
 			} => {
 				let parser_default = quote! { <#parser_type as Default>::default() };
 
-				match executor {
+				let child = match executor {
 					Some(executor) => match children.root_nodes.len() {
-						0 => quote! { #crate_path::Argument::<#name, #parser_type, _, { #description }>::new(#parser_default, #executor) },
+						0 => quote! { #executor },
 						_ => {
 							let executor_fn = &executor.expr;
-							quote! { #crate_path::Argument::<#name, #parser_type, _, { #description }>::new(#parser_default, #crate_path::WithExec::new(#children, #executor_fn)) }
+							quote! { #crate_path::WithExec::new(#children, #executor_fn) }
 						}
 					},
 					// `children` is guaranteed to be more than 0 if `executor` is None via parse-time validation, so this is safe
-					None => quote! { #crate_path::Argument::<#name, #parser_type, _, { #description }>::new(#parser_default, #children) },
+					None => quote! { #children },
+				};
+				match suggestions {
+					Some(suggester) => quote! { #crate_path::Argument::<#name, #parser_type, _, { #description }, _>::with_suggestions(#parser_default, #child, #suggester) },
+					None => quote! { #crate_path::Argument::<#name, #parser_type, _, { #description }>::new(#parser_default, #child) },
 				}
 			}
 		};
