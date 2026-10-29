@@ -32,6 +32,7 @@ impl<const NAMES: &'static [&'static str], Children, const DESCRIPTION: &'static
 }
 
 impl<const NAMES: &'static [&'static str], Children: Default, const DESCRIPTION: &'static str> Default for LiteralAliases<NAMES, Children, DESCRIPTION> {
+	#[inline(always)]
 	fn default() -> Self {
 		Self::new(Children::default())
 	}
@@ -43,6 +44,7 @@ impl<const NAMES: &'static [&'static str], Children: const_default::ConstDefault
 }
 
 impl<const NAMES: &'static [&'static str], Children, const DESCRIPTION: &'static str> WriteNode for LiteralAliases<NAMES, Children, DESCRIPTION> {
+	#[inline(always)]
 	fn write_node<Buf>(buf: &mut Buf) -> std::fmt::Result
 	where
 		Buf: Write,
@@ -57,6 +59,7 @@ where
 	Source: InputSource,
 	Children: ExecutableNode<Ctx, Stack, Source>,
 {
+	#[inline(always)]
 	fn execute(&self, ctx: &mut Ctx, input: &mut Input<Source>, stack: Stack) -> Result<(), DispatchError<Stack>> {
 		match input.peek() {
 			Some(token) if NAMES.iter().any(|name| token == *name) => {
@@ -81,6 +84,7 @@ where
 	<Children as NodeMetadata>::Inspect: InspectChild<Children, Source, Self>,
 	<Children as NodeMetadata>::Kind: InspectMissingChild<Children, Source>,
 {
+	#[inline(always)]
 	fn inspect(&self, inspector: &mut NodeInspector, input: &mut Input<Source>) -> Result<(), InspectionError> {
 		match input.peek() {
 			Some(token) if NAMES.iter().any(|name| token == *name) => {

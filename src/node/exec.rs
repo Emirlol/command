@@ -33,6 +33,7 @@ impl<F> Default for Exec<F>
 where
 	F: Default,
 {
+	#[inline(always)]
 	fn default() -> Self {
 		Self::new(F::default())
 	}
@@ -57,6 +58,7 @@ where
 	F: Executor<Ctx, Stack>,
 	F::Error: IntoDispatchError,
 {
+	#[inline(always)]
 	fn execute(&self, ctx: &mut Ctx, input: &mut Input<Source>, stack: Stack) -> Result<(), DispatchError<Stack>> {
 		if let Some(tokens) = input.remaining_tokens() {
 			return Err(DispatchError::Fatal(CommandError::TrailingInput(tokens.join(" "))));
@@ -67,6 +69,7 @@ where
 }
 
 impl<Source: InputSource, F> InspectableNode<Source> for Exec<F> {
+	#[inline(always)]
 	fn inspect(&self, _inspector: &mut NodeInspector, _input: &mut Input<Source>) -> Result<(), InspectionError> {
 		Err(InspectionError::IncompleteCommand)
 	}

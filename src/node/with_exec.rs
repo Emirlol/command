@@ -40,6 +40,7 @@ where
 	Node: Default,
 	F: Default,
 {
+	#[inline(always)]
 	fn default() -> Self {
 		Self::new(Node::default(), F::default())
 	}
@@ -61,6 +62,7 @@ where
 	F: Executor<Ctx, Stack>,
 	F::Error: IntoDispatchError,
 {
+	#[inline(always)]
 	fn execute(&self, ctx: &mut Ctx, input: &mut Input<Source>, stack: Stack) -> Result<(), DispatchError<Stack>> {
 		if input.has_remaining() {
 			self.node.execute(ctx, input, stack)
@@ -84,6 +86,7 @@ where
 	Source: InputSource,
 	Node: InspectableNode<Source>,
 {
+	#[inline(always)]
 	fn inspect(&self, inspector: &mut NodeInspector, input: &mut Input<Source>) -> Result<(), InspectionError> {
 		self.node.inspect(inspector, input)
 	}

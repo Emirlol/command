@@ -30,6 +30,7 @@ impl<const NAME: &'static str, Parser, Children, const DESCRIPTION: &'static str
 where
 	Parser: ArgParser,
 {
+	#[inline(always)]
 	fn write_node<Buf>(buf: &mut Buf) -> core::fmt::Result
 	where
 		Buf: Write,
@@ -53,6 +54,7 @@ where
 	Parser: Default,
 	Children: Default,
 {
+	#[inline(always)]
 	fn default() -> Self {
 		Self::new(Parser::default(), Children::default())
 	}
@@ -98,6 +100,7 @@ where
 	Parser::Error: Display,
 	Children: ExecutableNode<Ctx, (Parser::Output, Stack), Source>,
 {
+	#[inline(always)]
 	fn execute(&self, ctx: &mut Ctx, input: &mut Input<Source>, stack: Stack) -> Result<(), DispatchError<Stack>> {
 		let Some(token) = input.peek() else {
 			return Err(DispatchError::Recoverable(RecoverableError::IncompleteCommand, stack));
@@ -129,6 +132,7 @@ where
 	<Children as NodeMetadata>::Inspect: InspectChild<Children, Source, Self>,
 	<Children as NodeMetadata>::Kind: InspectMissingChild<Children, Source>,
 {
+	#[inline(always)]
 	fn inspect(&self, inspector: &mut NodeInspector, input: &mut Input<Source>) -> Result<(), InspectionError> {
 		let Some(token) = input.peek() else {
 			inspector.inspect::<Self>()?;

@@ -23,6 +23,7 @@ pub struct Literal<const NAME: &'static str, Children, const DESCRIPTION: &'stat
 }
 
 impl<const NAME: &'static str, Children, const DESCRIPTION: &'static str> WriteNode for Literal<NAME, Children, DESCRIPTION> {
+	#[inline(always)]
 	fn write_node<Buf>(buf: &mut Buf) -> std::fmt::Result
 	where
 		Buf: Write,
@@ -52,6 +53,7 @@ const impl<const NAME: &'static str, Children, const DESCRIPTION: &'static str> 
 where
 	Children: [const] Default,
 {
+	#[inline(always)]
 	fn default() -> Self {
 		Self::new(Children::default())
 	}
@@ -80,6 +82,7 @@ where
 	Source: InputSource,
 	Children: ExecutableNode<Ctx, Stack, Source>,
 {
+	#[inline(always)]
 	fn execute(&self, ctx: &mut Ctx, input: &mut Input<Source>, stack: Stack) -> Result<(), DispatchError<Stack>> {
 		match input.peek() {
 			Some(token) if token == NAME => {
@@ -102,6 +105,7 @@ where
 	<Children as NodeMetadata>::Inspect: InspectChild<Children, Source, Self>,
 	<Children as NodeMetadata>::Kind: InspectMissingChild<Children, Source>,
 {
+	#[inline(always)]
 	fn inspect(&self, inspector: &mut NodeInspector, input: &mut Input<Source>) -> Result<(), InspectionError> {
 		match input.peek() {
 			Some(token) if token == NAME => {

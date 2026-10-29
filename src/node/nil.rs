@@ -23,6 +23,7 @@ impl<Ctx, Stack, Source> ExecutableNode<Ctx, Stack, Source> for Nil
 where
 	Source: InputSource,
 {
+	#[inline(always)]
 	fn execute(&self, _ctx: &mut Ctx, input: &mut Input<Source>, stack: Stack) -> Result<(), DispatchError<Stack>> {
 		if input.has_remaining() {
 			Err(DispatchError::Recoverable(RecoverableError::UnknownCommand { offset: input.offset }, stack))
@@ -38,6 +39,7 @@ impl NodeMetadata for Nil {
 }
 
 impl<Source: InputSource> InspectableNode<Source> for Nil {
+	#[inline(always)]
 	fn inspect(&self, _inspector: &mut NodeInspector, input: &mut Input<Source>) -> Result<(), InspectionError> {
 		if input.has_remaining() {
 			Err(InspectionError::UnknownCommand { offset: input.offset })

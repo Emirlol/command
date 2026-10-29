@@ -110,6 +110,7 @@ pub trait InputSource {
 	fn len(&self) -> usize;
 
 	/// Returns the tokens at the given offset until the end of the input source, or `None` if the offset is out of bounds.
+	#[inline(always)]
 	fn remaining_tokens(&self, offset: usize) -> Option<Vec<&str>> {
 		if self.has_remaining(offset) {
 			Some((offset..self.len()).filter_map(|i| self.get(i)).collect())

@@ -35,6 +35,7 @@ fn push_styled(output: &mut String, text: &str, style: HelpStyle) {
 	}
 }
 
+#[inline(always)]
 fn push_argument_placeholder(output: &mut String, placeholder: &str) {
 	if let Some((name, value_type)) = placeholder.strip_prefix('<').and_then(|inner| inner.strip_suffix('>')).and_then(|inner| inner.split_once(": ")) {
 		let prefix_len = name.len() + 3;
@@ -46,6 +47,7 @@ fn push_argument_placeholder(output: &mut String, placeholder: &str) {
 	}
 }
 
+#[inline(always)]
 fn push_styled_usage(output: &mut String, usage: &str) {
 	let mut remaining = usage;
 	while let Some(start) = remaining.find('<') {
@@ -65,6 +67,7 @@ fn push_styled_usage(output: &mut String, usage: &str) {
 ///
 /// The `path` is the command path selected after the `help` command. With the
 /// `ansi` feature enabled, the returned string contains ANSI escape codes.
+#[inline(always)]
 pub(crate) fn format_help_output(tree_output: &str, path: &[&str]) -> String {
 	let mut output = String::with_capacity(tree_output.len() + 64);
 	push_styled(&mut output, "Usage:", HelpStyle::Heading);
@@ -103,6 +106,7 @@ pub(crate) fn format_help_output(tree_output: &str, path: &[&str]) -> String {
 	output
 }
 
+#[inline(always)]
 fn format_usage(tree_output: &str, path: &[&str]) -> String {
 	if path.is_empty() {
 		return "<command> [<arguments>...]".to_owned();
@@ -256,6 +260,7 @@ pub enum InspectionError {
 }
 
 impl InspectionError {
+	#[inline(always)]
 	pub(crate) fn into_command_error<Source>(self, input: &Input<Source>) -> crate::CommandError
 	where
 		Source: InputSource,
@@ -366,6 +371,7 @@ where
 	Source: InputSource,
 	Parent: NodeMetadata,
 {
+	#[inline(always)]
 	fn inspect_child(_child: &Child, _inspector: &mut NodeInspector, _input: &mut Input<Source>) -> Result<(), InspectionError> {
 		Ok(())
 	}
@@ -379,6 +385,7 @@ macro_rules! impl_inspect_child {
 			Parent: NodeMetadata + WriteNode,
 			Child: InspectableNode<Source>,
 		{
+			#[inline(always)]
 			fn inspect_child(child: &Child, inspector: &mut NodeInspector, input: &mut Input<Source>) -> Result<(), InspectionError> {
 				let _ = inspector.at_child(|inspector| child.inspect(inspector, input));
 				Ok(())

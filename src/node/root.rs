@@ -1,5 +1,6 @@
 use crate::{
 	CommandError,
+	DispatchError,
 	ExecutableNode,
 	Input,
 	InputSource,
@@ -7,7 +8,6 @@ use crate::{
 	InspectionError,
 	IntoInputSource,
 	NodeInspector,
-	error::DispatchError,
 };
 
 /// The root of a command tree.
@@ -25,6 +25,7 @@ impl<Children> Root<Children> {
 	///
 	/// Normal command executors still control their own side effects and return `Ok(None)` here.
 	/// `run` itself does not write to stdout or stderr.
+	#[inline(always)]
 	pub fn run<Ctx, Source>(&self, ctx: &mut Ctx, input: impl IntoInputSource<Source = Source>) -> Result<Option<String>, CommandError>
 	where
 		Source: InputSource,
@@ -56,6 +57,7 @@ impl<Children> Root<Children> {
 	/// If there's no context to pass to the executor, you can alternatively use [`execute_no_context`] which will use `()` as the context type.
 	///
 	/// See [IntoInputSource] for supported input types.
+	#[inline(always)]
 	pub fn execute<Ctx, Source>(&self, ctx: &mut Ctx, input: impl IntoInputSource<Source = Source>) -> Result<(), CommandError>
 	where
 		Source: InputSource,
@@ -81,6 +83,7 @@ impl<Children> Root<Children> {
 		self.execute(&mut (), input)
 	}
 
+	#[inline(always)]
 	pub fn inspect<Source>(&self, input: impl IntoInputSource<Source = Source>) -> Result<String, InspectionError>
 	where
 		Source: InputSource,
@@ -99,6 +102,7 @@ impl<Children> Default for Root<Children>
 where
 	Children: Default,
 {
+	#[inline(always)]
 	fn default() -> Self {
 		Self::new(Children::default())
 	}

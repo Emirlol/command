@@ -46,6 +46,7 @@ pub enum RecoverableError {
 }
 
 impl RecoverableError {
+	#[inline(always)]
 	pub fn into_command_error<Source>(self, input: &Input<Source>) -> CommandError
 	where
 		Source: InputSource,
@@ -103,6 +104,7 @@ pub enum DispatchError<Stack> {
 }
 
 impl<Stack> DispatchError<Stack> {
+	#[inline(always)]
 	pub fn into_fatal<Source>(self, input: &Input<Source>) -> DispatchError<Stack>
 	where
 		Source: InputSource,
@@ -113,6 +115,7 @@ impl<Stack> DispatchError<Stack> {
 		}
 	}
 
+	#[inline(always)]
 	pub fn into_fatal_for_parent<Source, ParentStack>(self, input: &Input<Source>) -> DispatchError<ParentStack>
 	where
 		Source: InputSource,
