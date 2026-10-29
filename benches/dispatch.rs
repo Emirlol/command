@@ -32,10 +32,8 @@ const COMMAND_TREE: Root<
 		Literal<"alpha", Exec<fn(&mut u32) -> Result<(), Infallible>>>,
 		Choice<
 			Literal<"beta", Exec<fn(&mut u32) -> Result<(), Infallible>>>,
-			Choice<Literal<"gamma", Exec<fn(&mut u32) -> Result<(), Infallible>>>, Literal<"number", Argument<"value", U32Parser, Exec<fn(&mut u32, u32) -> Result<(), Infallible>>>>, BothInspect>,
-			BothInspect,
+			Choice<Literal<"gamma", Exec<fn(&mut u32) -> Result<(), Infallible>>>, Literal<"number", Argument<"value", U32Parser, Exec<fn(&mut u32, u32) -> Result<(), Infallible>>>>>,
 		>,
-		BothInspect,
 	>,
 > = command! {
 	literal "alpha" executes |ctx: &mut u32| {

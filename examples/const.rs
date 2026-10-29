@@ -34,9 +34,7 @@ const COMMAND: Root<
 					WithExec<Argument<"arg2", StringParser, Argument<"arg3", StringParser, Exec<fn(&mut (), String, String, String) -> Result<(), !>>>>, fn(&mut (), String) -> Result<(), !>>,
 				>,
 			>,
-			BothInspect,
 		>,
-		BothInspect,
 	>,
 > = command! {
 	literal "hello" {

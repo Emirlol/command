@@ -102,28 +102,24 @@ where
 mod tests {
 	use std::assert_matches;
 
-	use command::{
-		Argument,
-		BothInspect,
-		Choice,
-		Literal,
-		NodeInspector,
-		U32Parser,
-	};
-
 	use crate::{
+		Argument,
+		Choice,
 		CommandError,
 		DispatchError,
 		Exec,
 		ExecutableNode,
 		Input,
+		InspectableNode,
 		InspectionError,
 		IntoInputSource,
+		Literal,
 		LiteralAliases,
 		Nil,
+		NodeInspector,
 		RecoverableError,
+		U32Parser,
 		WriteNode,
-		inspect::InspectableNode,
 	};
 
 	#[test]
@@ -157,11 +153,7 @@ mod tests {
 	fn aliases_inspect_correctly() {
 		type Node = LiteralAliases<
 			{ &["stop", "quit", "q"] },
-			Choice<
-				LiteralAliases<{ &["now", "immediately"] }, Nil, "Stops immediately">,
-				Literal<"later", Argument<"delay", U32Parser, Nil, "The delay in seconds">, "Stops after a delay">,
-				BothInspect,
-			>,
+			Choice<LiteralAliases<{ &["now", "immediately"] }, Nil, "Stops immediately">, Literal<"later", Argument<"delay", U32Parser, Nil, "The delay in seconds">, "Stops after a delay">>,
 			"Stops the current process",
 		>;
 

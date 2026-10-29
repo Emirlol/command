@@ -35,10 +35,8 @@ fn main() {
 							fn(&mut (), String) -> Result<(), Infallible>,
 						>,
 					>,
-				>,
-				BothInspect
-			>,
-			BothInspect
+				>
+			>
 		>,
 	>*/ = command! {
 		literal "hello" {

@@ -236,9 +236,11 @@ impl NodeInspector {
 }
 
 /// Nodes that can be inspected. This is used to generate the /help command.
-pub trait InspectableNode<Source>
+pub trait InspectableNode<Source, Inspectability = <Self as NodeMetadata>::Inspect>
 where
 	Source: InputSource,
+	Inspectability: InspectCapability,
+	Self: NodeMetadata,
 {
 	fn inspect(&self, inspector: &mut NodeInspector, input: &mut Input<Source>) -> Result<(), InspectionError>;
 }

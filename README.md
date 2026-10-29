@@ -38,10 +38,8 @@ let command: Root< // The root node with the convenience methods to execute and 
 						Exec<fn(&mut (), String) -> Result<(), Infallible>>,
 					>,
 				>,
-			>,
-			BothInspect // Boilerplate to help with the `help` command, to distinguish which children of a `Choice` can be inspected. This is a bit of a leaked abstraction, but it is necessary.
-		>,
-		BothInspect
+			>
+		>
 	>,
 > = command! { /*...*/ }
 ```

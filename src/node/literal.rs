@@ -125,7 +125,6 @@ mod tests {
 
 	use crate::{
 		Argument,
-		BothInspect,
 		Choice,
 		CommandError,
 		DispatchError,
@@ -166,7 +165,7 @@ mod tests {
 	fn literals_inspect_correctly() {
 		type Node = Literal<
 			"stop",
-			Choice<Literal<"now", Nil, "Stops immediately">, Literal<"later", Argument<"delay", U32Parser, Nil, "The delay in seconds">, "Stops after a delay">, BothInspect>,
+			Choice<Literal<"now", Nil, "Stops immediately">, Literal<"later", Argument<"delay", U32Parser, Nil, "The delay in seconds">, "Stops after a delay">>,
 			"Stops the current process",
 		>;
 

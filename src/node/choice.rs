@@ -1,9 +1,9 @@
-use std::marker::PhantomData;
-
 use crate::{
+	BothInspect,
 	CombineInspect,
 	DispatchError,
 	ExecutableNode,
+	HeadInspect,
 	Input,
 	InputSource,
 	InspectableNode,
@@ -11,51 +11,49 @@ use crate::{
 	NodeInspector,
 	NodeMetadata,
 	NoneInspect,
+	TailInspect,
 };
 
 /// A node that has 2 child nodes.
 ///
 /// This is the main building block of a command tree, allowing for branching between different command paths.
-pub struct Choice<Head, Tail, Inspectability = NoneInspect> {
+pub struct Choice<Head, Tail> {
 	head: Head,
 	tail: Tail,
-	_inspect: PhantomData<Inspectability>,
 }
 
-impl<Head, Tail> Choice<Head, Tail, <<Head as NodeMetadata>::Inspect as CombineInspect<<Tail as NodeMetadata>::Inspect>>::Output>
+impl<Head, Tail> Choice<Head, Tail>
 where
 	Head: NodeMetadata,
 	Tail: NodeMetadata,
-	<Head as NodeMetadata>::Inspect: CombineInspect<<Tail as NodeMetadata>::Inspect>,
 {
 	#[inline(always)]
 	pub const fn new(head: Head, tail: Tail) -> Self {
-		Self { head, tail, _inspect: PhantomData }
+		Self { head, tail }
 	}
 }
 
-impl<Head, Tail> Default for Choice<Head, Tail, <<Head as NodeMetadata>::Inspect as CombineInspect<<Tail as NodeMetadata>::Inspect>>::Output>
+impl<Head, Tail> Default for Choice<Head, Tail>
 where
 	Head: Default + NodeMetadata,
 	Tail: Default + NodeMetadata,
-	<Head as NodeMetadata>::Inspect: CombineInspect<<Tail as NodeMetadata>::Inspect>,
 {
+	#[inline(always)]
 	fn default() -> Self {
 		Self::new(Head::default(), Tail::default())
 	}
 }
 
 #[cfg(feature = "const")]
-impl<Head, Tail> const_default::ConstDefault for Choice<Head, Tail, <<Head as NodeMetadata>::Inspect as CombineInspect<<Tail as NodeMetadata>::Inspect>>::Output>
+impl<Head, Tail> const_default::ConstDefault for Choice<Head, Tail>
 where
 	Head: const_default::ConstDefault + NodeMetadata,
 	Tail: const_default::ConstDefault + NodeMetadata,
-	<Head as NodeMetadata>::Inspect: CombineInspect<<Tail as NodeMetadata>::Inspect>,
 {
 	const DEFAULT: Self = Self::new(Head::DEFAULT, Tail::DEFAULT);
 }
 
-impl<Head, Tail> NodeMetadata for Choice<Head, Tail, <<Head as NodeMetadata>::Inspect as CombineInspect<<Tail as NodeMetadata>::Inspect>>::Output>
+impl<Head, Tail> NodeMetadata for Choice<Head, Tail>
 where
 	Head: NodeMetadata,
 	Tail: NodeMetadata,
@@ -65,12 +63,13 @@ where
 	type Kind = <Head as NodeMetadata>::Kind;
 }
 
-impl<Ctx, Stack, Source, Head, Tail, Inspectability> ExecutableNode<Ctx, Stack, Source> for Choice<Head, Tail, Inspectability>
+impl<Ctx, Stack, Source, Head, Tail> ExecutableNode<Ctx, Stack, Source> for Choice<Head, Tail>
 where
 	Source: InputSource,
 	Head: ExecutableNode<Ctx, Stack, Source>,
 	Tail: ExecutableNode<Ctx, Stack, Source>,
 {
+	#[inline(always)]
 	fn execute(&self, ctx: &mut Ctx, input: &mut Input<Source>, stack: Stack) -> Result<(), DispatchError<Stack>> {
 		match self.head.execute(ctx, input, stack) {
 			Ok(()) => Ok(()),
@@ -80,12 +79,53 @@ where
 	}
 }
 
-impl<Source, Head, Tail, Inspectability> InspectableNode<Source> for Choice<Head, Tail, Inspectability>
+impl<Source, Head, Tail> InspectableNode<Source, NoneInspect> for Choice<Head, Tail>
 where
 	Source: InputSource,
-	Head: InspectableNode<Source>,
-	Tail: InspectableNode<Source>,
+	Head: NodeMetadata,
+	Tail: NodeMetadata,
+	<Head as NodeMetadata>::Inspect: CombineInspect<<Tail as NodeMetadata>::Inspect>,
 {
+	#[inline(always)]
+	fn inspect(&self, _inspector: &mut NodeInspector, _input: &mut Input<Source>) -> Result<(), InspectionError> {
+		Ok(())
+	}
+}
+
+impl<Source, Head, Tail> InspectableNode<Source, HeadInspect> for Choice<Head, Tail>
+where
+	Source: InputSource,
+	Head: InspectableNode<Source> + NodeMetadata,
+	Tail: NodeMetadata,
+	<Head as NodeMetadata>::Inspect: CombineInspect<<Tail as NodeMetadata>::Inspect>,
+{
+	#[inline(always)]
+	fn inspect(&self, inspector: &mut NodeInspector, input: &mut Input<Source>) -> Result<(), InspectionError> {
+		self.head.inspect(inspector, input)
+	}
+}
+
+impl<Source, Head, Tail> InspectableNode<Source, TailInspect> for Choice<Head, Tail>
+where
+	Source: InputSource,
+	Tail: InspectableNode<Source> + NodeMetadata,
+	Head: NodeMetadata,
+	<Head as NodeMetadata>::Inspect: CombineInspect<<Tail as NodeMetadata>::Inspect>,
+{
+	#[inline(always)]
+	fn inspect(&self, inspector: &mut NodeInspector, input: &mut Input<Source>) -> Result<(), InspectionError> {
+		self.tail.inspect(inspector, input)
+	}
+}
+
+impl<Source, Head, Tail> InspectableNode<Source, BothInspect> for Choice<Head, Tail>
+where
+	Source: InputSource,
+	Head: InspectableNode<Source> + NodeMetadata,
+	Tail: InspectableNode<Source> + NodeMetadata,
+	<Head as NodeMetadata>::Inspect: CombineInspect<<Tail as NodeMetadata>::Inspect>,
+{
+	#[inline(always)]
 	fn inspect(&self, inspector: &mut NodeInspector, input: &mut Input<Source>) -> Result<(), InspectionError> {
 		let start = input.checkpoint();
 		let mut head_inspector = inspector.branch();
