@@ -42,9 +42,9 @@ impl<const NAME: &'static str, Children, const DESCRIPTION: &'static str> NodeMe
 	type Kind = LiteralKind;
 }
 
-impl<const NAME: &'static str, Children, const DESCRIPTION: &'static str> Literal<NAME, Children, DESCRIPTION> {
+const impl<const NAME: &'static str, Children, const DESCRIPTION: &'static str> Literal<NAME, Children, DESCRIPTION> {
 	#[inline(always)]
-	pub const fn new(children: Children) -> Self {
+	pub fn new(children: Children) -> Self {
 		Self { children }
 	}
 }
@@ -57,14 +57,6 @@ where
 	fn default() -> Self {
 		Self::new(Children::default())
 	}
-}
-
-#[cfg(feature = "const")]
-impl<const NAME: &'static str, Children, const DESCRIPTION: &'static str> const_default::ConstDefault for Literal<NAME, Children, DESCRIPTION>
-where
-	Children: const_default::ConstDefault,
-{
-	const DEFAULT: Self = Self::new(Children::DEFAULT);
 }
 
 impl<Child, Source> InspectMissingChild<Child, Source> for LiteralKind

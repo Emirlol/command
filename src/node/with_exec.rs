@@ -28,31 +28,22 @@ pub struct WithExec<Node, F> {
 	executor: F,
 }
 
-impl<Node, F> WithExec<Node, F> {
+const impl<Node, F> WithExec<Node, F> {
 	#[inline(always)]
-	pub const fn new(node: Node, executor: F) -> Self {
+	pub fn new(node: Node, executor: F) -> Self {
 		Self { node, executor }
 	}
 }
 
-impl<Node, F> Default for WithExec<Node, F>
+const impl<Node, F> Default for WithExec<Node, F>
 where
-	Node: Default,
-	F: Default,
+	Node: [const] Default,
+	F: [const] Default,
 {
 	#[inline(always)]
 	fn default() -> Self {
 		Self::new(Node::default(), F::default())
 	}
-}
-
-#[cfg(feature = "const")]
-impl<Node, F> const_default::ConstDefault for WithExec<Node, F>
-where
-	Node: const_default::ConstDefault,
-	F: const_default::ConstDefault,
-{
-	const DEFAULT: Self = Self::new(Node::DEFAULT, F::DEFAULT);
 }
 
 impl<Ctx, Stack, Node, F, Source> ExecutableNode<Ctx, Stack, Source> for WithExec<Node, F>

@@ -15,12 +15,24 @@ pub struct Root<Children> {
 	children: Children,
 }
 
-impl<Children> Root<Children> {
+const impl<Children> Root<Children> {
 	#[inline(always)]
-	pub const fn new(children: Children) -> Self {
+	pub fn new(children: Children) -> Self {
 		Self { children }
 	}
+}
 
+const impl<Children> Default for Root<Children>
+where
+	Children: [const] Default,
+{
+	#[inline(always)]
+	fn default() -> Self {
+		Self::new(Children::default())
+	}
+}
+
+impl<Children> Root<Children> {
 	/// Executes input, returning formatted help text when the input is the built-in `help` command.
 	///
 	/// Normal command executors still control their own side effects and return `Ok(None)` here.
@@ -37,7 +49,7 @@ impl<Children> Root<Children> {
 				input.advance(1); // The help command can match sub-commands and show the help for those layers, so we need to remove `help` from the input before inspecting the tree.
 				let mut inspector = NodeInspector::new();
 				self.children.inspect(&mut inspector, &mut input).map_err(|error| error.into_command_error(&input))?;
-				let path = input.remaining_tokens_at(1).unwrap_or_default();
+				let path = input.remaining_tokens_at(1).map(|tokens| tokens.into_iter().collect::<Vec<_>>()).unwrap_or_default();
 				let output = crate::inspect::format_help_output(&inspector.output, &path);
 				Ok(Some(output))
 			} else {
@@ -93,27 +105,9 @@ impl<Children> Root<Children> {
 
 		let mut inspector = NodeInspector::new();
 		self.children.inspect(&mut inspector, &mut input)?;
-		let path = input.remaining_tokens_at(0).unwrap_or_default();
+		let path = input.remaining_tokens_at(0).map(|tokens| tokens.into_iter().collect::<Vec<_>>()).unwrap_or_default();
 		Ok(crate::inspect::format_help_output(&inspector.output, &path))
 	}
-}
-
-impl<Children> Default for Root<Children>
-where
-	Children: Default,
-{
-	#[inline(always)]
-	fn default() -> Self {
-		Self::new(Children::default())
-	}
-}
-
-#[cfg(feature = "const")]
-impl<Children> const_default::ConstDefault for Root<Children>
-where
-	Children: const_default::ConstDefault,
-{
-	const DEFAULT: Self = Self::new(Children::DEFAULT);
 }
 
 #[cfg(test)]

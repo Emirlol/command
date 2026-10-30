@@ -106,15 +106,15 @@ fn empty_sources_report_incomplete_commands() {
 }
 
 fn assert_cursor(source: impl InputSource) {
-	assert_eq!(source.remaining_tokens(source.len()), None);
-	assert_eq!(source.remaining_tokens(source.len() + 1), None);
+	assert_eq!(source.remaining_tokens(source.len()).map(|i| i.into_iter().collect::<Vec<_>>()), None);
+	assert_eq!(source.remaining_tokens(source.len() + 1).map(|i| i.into_iter().collect::<Vec<_>>()), None);
 	let mut input = Input::new(source);
 	let start = input.checkpoint();
 	assert_eq!(input.next_token(), Some(""));
-	assert_eq!(input.remaining_tokens(), Some(vec!["hello world"]));
+	assert_eq!(input.remaining_tokens().map(|i| i.into_iter().collect::<Vec<_>>()), Some(vec!["hello world"]));
 	assert_eq!(input.next_token(), Some("hello world"));
 	assert!(!input.has_remaining());
-	assert_eq!(input.remaining_tokens(), None);
+	assert_eq!(input.remaining_tokens().map(|i| i.into_iter().collect::<Vec<_>>()), None);
 	assert_eq!(input.next_token(), None);
 	assert_eq!(input.next_token(), None);
 	input.restore(start);

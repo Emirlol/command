@@ -1,3 +1,5 @@
+#![feature(const_default, const_trait_impl)]
+
 use std::{
 	assert_matches,
 	convert::Infallible,
@@ -7,16 +9,12 @@ use std::{
 use command::{
 	Argument,
 	Choice,
+	CommandError,
 	Exec,
 	Literal,
 	Root,
-	WithExec,
-};
-use command::{
-	BothInspect,
-	CommandError,
 	StringParser,
-	const_default,
+	WithExec,
 };
 use macros::command;
 

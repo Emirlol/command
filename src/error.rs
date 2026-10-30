@@ -57,7 +57,10 @@ impl RecoverableError {
 					unreachable!(
 						"Offset {} is out of bounds for input `{}`",
 						offset,
-						input.remaining_tokens_at(offset).map(|tokens| tokens.join(" ")).unwrap_or_default()
+						input
+							.remaining_tokens_at(offset)
+							.map(|tokens| tokens.into_iter().intersperse(" ").collect::<String>())
+							.unwrap_or_default()
 					);
 				};
 				CommandError::UnknownCommand(token.to_string())
@@ -67,7 +70,10 @@ impl RecoverableError {
 					unreachable!(
 						"Offset {} is out of bounds for input `{}`",
 						offset,
-						input.remaining_tokens_at(offset).map(|tokens| tokens.join(" ")).unwrap_or_default()
+						input
+							.remaining_tokens_at(offset)
+							.map(|tokens| tokens.into_iter().intersperse(" ").collect::<String>())
+							.unwrap_or_default()
 					);
 				};
 				CommandError::InvalidArgument {
@@ -82,7 +88,10 @@ impl RecoverableError {
 					unreachable!(
 						"Offset {} is out of bounds for input `{}`",
 						offset,
-						input.remaining_tokens_at(offset).map(|tokens| tokens.join(" ")).unwrap_or_default()
+						input
+							.remaining_tokens_at(offset)
+							.map(|tokens| tokens.into_iter().intersperse(" ").collect::<String>())
+							.unwrap_or_default()
 					);
 				};
 				CommandError::TrailingInput(token.to_string())

@@ -17,14 +17,14 @@ let command: Root< // The root node with the convenience methods to execute and 
 					StringParser, // The parser type to use for this argument, which will parse the input into a value of the type that the parser returns. Custom argument parsers can be defined by implementing the `ArgParser` trait.
 					Exec< // Executor wrapper node to not pollute the type system for functions for any node trait impls
 						// The executor function of this node. For executors, the first parameter is always the context for the command tree, which may hold state, mpsc channels, or anything else you want to pass into the executor.
-						// The context will be passes in at the root, and will be available on any executor node.
+						// The context will be passed in at the root, and will be available on any executor node.
 						// The rest of the parameters are the arguments that have been parsed from the parent `Argument` nodes in the execution path, in the order of the nodes in the tree.
 						// This means a node has access to the arguments of its parent nodes, but not its children.
-						fn(&mut (), String) -> Result<(), Infallible>
-					>
+						fn(&mut (), String) -> Result<(), Infallible>,
+					>,
 				>,
-				fn(&mut ()) -> Result<(), Infallible> // The executor of this `WithExec`
-			>
+				fn(&mut ()) -> Result<(), Infallible>, // The executor of this `WithExec`
+			>,
 		>,
 		Choice< // Choice nodes can be chained to create a tree of sibling nodes
 			Literal<"hello2", Argument<"name", StringParser, Exec<fn(&mut (), String) -> Result<(), Infallible>>>>,
@@ -35,25 +35,25 @@ let command: Root< // The root node with the convenience methods to execute and 
 					StringParser,
 					WithExec<
 						Argument<"arg2", StringParser, Argument<"arg3", StringParser, Exec<fn(&mut (), String, String, String) -> Result<(), Infallible>>>>,
-						Exec<fn(&mut (), String) -> Result<(), Infallible>>,
+						fn(&mut (), String) -> Result<(), Infallible>,
 					>,
 				>,
-			>
-		>
+			>,
+		>,
 	>,
 > = command! { /*...*/ }
 ```
 
-(This is the type for the [basics.rs](./examples/basics.rs) example.)
+(This is the type for the [basics.rs](./examples/basics.rs) example, you should check it out for the full example.)
 
 An explanation of the node types are available in the above snippet.
-The only exception is that, strictly speaking, executors are child nodes of the node they are defined in, but they are not part of the tree structure and are not considered when parsing inputs. They are only called when the node is reached during execution.
+The only exception is that, strictly speaking, executors are child nodes of the node they are defined in, but they are not part of the tree structure and are not considered when parsing inputs or inspecting the tree. They are only called when the node is reached during execution.
 
 ---
 
 Naturally, this is very verbose and does not help much. The tree is intended to be generated with the `command!` macro, which will create the tree for you and you can store the tree in a variable by relying on type inference.
 
-The type is only needed if you want to use it as a generic parameter, or need to store the command tree as a `const` variable (in which case, you'll also need the `const` feature).
+The type is only needed if you want to use it as a generic parameter, or need to store the command tree as a `const` variable (in which case, you'll also need your custom `ArgParser`s to const-impl `Default` - if you don't have any, you're good to go as it's already const-impl for all basic parsers).
 
 If you *do* need to do one of these, use your IDE to check the type and just copy it from there (and optionally type-alias it to something more suitable), as there doesn't seem to be an intended way to get/build macro outputs' types otherwise.
 
@@ -93,6 +93,13 @@ There are a few rules to the macro:
 
     // With the function path:
     literal "name" executes my_function // Where my_function: fn(&mut ContextType) -> Result<(), {Any error type}>
+    
+    // With aliases - this node will match any of the names in the list, and will execute the same executor for all of them, or delegate to the children if there are any.
+    // Prefer this over defining multiple literal nodes with the same executor, as it will reduce the size of the command tree and improve performance.
+    // The compiler will most likely also help make the dispatch faster as it can see what the possible inputs are at compile time, as they are implemented as a const array of string slices.
+    literal "name1" | "name2" | "name3" executes |context: &mut ContextType| {
+        // ...
+    }
     ```
 
   - ```rust
@@ -158,6 +165,5 @@ Use the returned `Some(help)` from `run` to print, transmit, or otherwise handle
 The help page includes a usage line, command descriptions, and positional arguments indented beneath the commands that take them. Enable the opt-in `ansi` feature to add ANSI styling. When enabled, escape codes are included in strings returned by `inspect`.
 
 ## Features
-- `const`: Enabling this allows the `command!` macro to return a const-assignable value. The command tree evaluation still happens at runtime, but the tree itself can be stored in a `const` variable. The only addition required to make this is to implement (or derive) `ConstDefault` on the relevant `ArgParser` types.
 - `argv`: Adds support for argv crate, which allows iterating over the commandline arguments via an `Iterator<Item = &'static OsStr>` implementation. This is mainly for convenience, as it allows you to put in `arv::iter()` as the command input, which will convert the OsStr references into str references for you. This will skip the first argument, which is the executable itself.
 - `ansi`: Adds ANSI styling to generated help output. It is disabled by default and adds no dependency.

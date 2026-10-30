@@ -1,8 +1,5 @@
 use std::convert::Infallible;
 
-#[cfg(feature = "const")]
-use const_default::ConstDefault;
-
 #[derive(Debug, thiserror::Error)]
 pub enum ParseError {
 	#[error("failed to parse integer: {0}")]
@@ -22,9 +19,14 @@ pub trait ArgParser {
 	fn parse(&self, input: &str) -> Result<Self::Output, Self::Error>;
 }
 
-#[derive(Default)]
-#[cfg_attr(feature = "const", derive(ConstDefault))]
 pub struct StringParser;
+
+const impl Default for StringParser {
+	#[inline(always)]
+	fn default() -> Self {
+		StringParser
+	}
+}
 
 impl ArgParser for StringParser {
 	type Output = String;
@@ -39,9 +41,14 @@ impl ArgParser for StringParser {
 macro_rules! impl_int_parser {
     ($($ty:ty => $name:ident),* $(,)?) => {
         $(
-            #[derive(Default)]
-			#[cfg_attr(feature = "const", derive(ConstDefault))]
             pub struct $name;
+
+            const impl Default for $name {
+	            #[inline(always)]
+				fn default() -> Self {
+					$name
+				}
+            }
 
             impl ArgParser for $name {
                 type Output = $ty;
@@ -70,9 +77,14 @@ impl_int_parser!(
 macro_rules! impl_float_parser {
     ($($ty:ty => $name:ident),* $(,)?) => {
         $(
-            #[derive(Default)]
-			#[cfg_attr(feature = "const", derive(ConstDefault))]
             pub struct $name;
+
+            const impl Default for $name {
+	            #[inline(always)]
+				fn default() -> Self {
+					$name
+				}
+			}
 
             impl ArgParser for $name {
                 type Output = $ty;
@@ -92,9 +104,14 @@ impl_float_parser!(
 	f64 => F64Parser,
 );
 
-#[derive(Default)]
-#[cfg_attr(feature = "const", derive(ConstDefault))]
 pub struct BoolParser;
+
+const impl Default for BoolParser {
+	#[inline(always)]
+	fn default() -> Self {
+		BoolParser
+	}
+}
 
 impl ArgParser for BoolParser {
 	type Output = bool;

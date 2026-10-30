@@ -15,7 +15,6 @@ syn = { version = "3.0", features = ["full"] }
 proc-macro2 = "1.0"
 quote = "1.0"
 proc-macro-crate = "3"
-const-default = "1.0.0"
 
 macros = { path = "crates/macros" }
 internal-macros = { path = "crates/internal-macros" }
@@ -29,7 +28,6 @@ edition.workspace = true
 macros.workspace = true
 internal-macros.workspace = true
 thiserror.workspace = true
-const-default = { workspace = true, optional = true, features = ["derive"] }
 argv = { version = "0.1.14", optional = true }
 
 [dev-dependencies]
@@ -38,14 +36,10 @@ clap = { version = "4", features = ["derive"] }
 [[bench]]
 name = "dispatch"
 harness = true
-required-features = ["const"]
 
 [features]
 ## Adds ANSI styling to help output. Disabled by default; when enabled, help strings include ANSI escape codes.
 ansi = []
-
-## Enabling this allows the `command!` macro to return a const-assignable value. The command tree evaluation still happens at runtime, but the tree itself can be stored in a `const` variable. The only addition required to make this is to implement (or derive) `ConstDefault` on the relevant `ArgParser` types.
-const = ["macros/const", "dep:const-default"]
 
 ## Adds support for argv crate, which allows iterating over the command-line arguments via an `Iterator<Item = &'static OsStr>` implementation. This is mainly for convenience, as it allows you to put in `arv::iter()` as the command input, which will convert the OsStr references into str references for you. This will skip the first argument, which is the executable itself.
 argv = ["dep:argv"]
@@ -61,7 +55,6 @@ path = "examples/repl.rs"
 [[example]]
 name = "const"
 path = "examples/const.rs"
-required-features = ["const"]
 
 [[test]]
 name = "cli_input"

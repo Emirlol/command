@@ -42,31 +42,22 @@ where
 	}
 }
 
-impl<const NAME: &'static str, Parser, Children, const DESCRIPTION: &'static str> Argument<NAME, Parser, Children, DESCRIPTION> {
+const impl<const NAME: &'static str, Parser, Children, const DESCRIPTION: &'static str> Argument<NAME, Parser, Children, DESCRIPTION> {
 	#[inline(always)]
-	pub const fn new(parser: Parser, children: Children) -> Self {
+	pub fn new(parser: Parser, children: Children) -> Self {
 		Self { parser, children }
 	}
 }
 
-impl<const NAME: &'static str, Parser, Children, const DESCRIPTION: &'static str> Default for Argument<NAME, Parser, Children, DESCRIPTION>
+const impl<const NAME: &'static str, Parser, Children, const DESCRIPTION: &'static str> Default for Argument<NAME, Parser, Children, DESCRIPTION>
 where
-	Parser: Default,
-	Children: Default,
+	Parser: [const] Default,
+	Children: [const] Default,
 {
 	#[inline(always)]
 	fn default() -> Self {
 		Self::new(Parser::default(), Children::default())
 	}
-}
-
-#[cfg(feature = "const")]
-impl<const NAME: &'static str, Parser, Children, const DESCRIPTION: &'static str> const_default::ConstDefault for Argument<NAME, Parser, Children, DESCRIPTION>
-where
-	Parser: const_default::ConstDefault,
-	Children: const_default::ConstDefault,
-{
-	const DEFAULT: Self = Self::new(Parser::DEFAULT, Children::DEFAULT);
 }
 
 /// A node kind for an argument node.

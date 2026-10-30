@@ -307,11 +307,8 @@ impl ToTokens for CommandNode {
 				children,
 				executor,
 			} => {
-				let parser_default = if cfg!(feature = "const") {
-					quote! { <#parser_type as #crate_path::const_default::ConstDefault>::DEFAULT }
-				} else {
-					quote! { <#parser_type as Default>::default() }
-				};
+				let parser_default = quote! { <#parser_type as Default>::default() };
+
 				match executor {
 					Some(executor) => match children.root_nodes.len() {
 						0 => quote! { #crate_path::Argument::<#name, #parser_type, _, { #description }>::new(#parser_default, #executor) },

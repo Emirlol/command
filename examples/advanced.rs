@@ -34,8 +34,7 @@ enum BanReason {
 }
 
 // Parsers can be defined for other types besides the primitive types, this is useful for complex types you want to be able to parse from the command line.
-#[cfg_attr(not(feature = "const"), derive(Default))]
-#[cfg_attr(feature = "const", derive(const_default::ConstDefault))]
+#[derive(Default)]
 struct BanReasonParser;
 
 impl ArgParser for BanReasonParser {

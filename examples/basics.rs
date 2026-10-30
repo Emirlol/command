@@ -6,24 +6,37 @@ use std::{
 // These imports are normally not required, but since the example is within the same project as the main lib, the macro impl generates crate:: prefixed paths which break in this example
 use command::{
 	Argument,
-	BothInspect,
 	Choice,
+	CommandError,
 	Exec,
 	Literal,
 	Root,
-	WithExec,
-};
-use command::{
-	CommandError,
 	StringParser,
+	WithExec,
 };
 use macros::command;
 
 fn main() {
-	let command/*: Root<
-		Choice<
-			Literal<"hello", WithExec<Argument<"name", StringParser, Exec<fn(&mut (), String) -> Result<(), Infallible>>>, Exec<fn(&mut ()) -> Result<(), Infallible>>>>,
-			Choice<
+	let command/*: Root< // The root node with the convenience methods to execute and inspect the command tree
+		Choice< // A choice node, which will try to parse the input with the first child, and if it fails, will try the second child
+			Literal< // A literal node that will match a literal string input
+				"hello", // The literal string to match
+				WithExec< // A node that has both an executor and children, meaning the children of the node in this node are optional and may be omitted (in which case, this WithExec's executor will run)
+					Argument< // An Argument node that will parse an argument with a parser type
+						"name", // The name of the argument being expected, for help output & general convenience
+						StringParser, // The parser type to use for this argument, which will parse the input into a value of the type that the parser returns. Custom argument parsers can be defined by implementing the `ArgParser` trait.
+						Exec< // Executor wrapper node to not pollute the type system for functions for any node trait impls
+							// The executor function of this node. For executors, the first parameter is always the context for the command tree, which may hold state, mpsc channels, or anything else you want to pass into the executor.
+							// The context will be passes in at the root, and will be available on any executor node.
+							// The rest of the parameters are the arguments that have been parsed from the parent `Argument` nodes in the execution path, in the order of the nodes in the tree.
+							// This means a node has access to the arguments of its parent nodes, but not its children.
+							fn(&mut (), String) -> Result<(), Infallible>,
+						>,
+					>,
+					fn(&mut ()) -> Result<(), Infallible> // The executor of this `WithExec`
+				>,
+			>,
+			Choice< // Choice nodes can be chained to create a tree of sibling nodes
 				Literal<"hello2", Argument<"name", StringParser, Exec<fn(&mut (), String) -> Result<(), Infallible>>>>,
 				Literal<
 					"test",
@@ -35,10 +48,10 @@ fn main() {
 							fn(&mut (), String) -> Result<(), Infallible>,
 						>,
 					>,
-				>
-			>
+				>,
+			>,
 		>,
-	>*/ = command! {
+	> */= command! {
 		literal "hello" {
 			// Executors can be defined inline for leaf nodes, without requiring a new scope
 			argument "name": StringParser executes |_: &mut (), name: String| {

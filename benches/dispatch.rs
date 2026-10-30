@@ -1,4 +1,4 @@
-#![feature(test)]
+#![feature(test, const_default, const_trait_impl)]
 
 extern crate test;
 
@@ -13,7 +13,6 @@ use clap::{
 use command::{
 	ArgParser,
 	Argument,
-	BothInspect,
 	Choice,
 	Exec,
 	Literal,

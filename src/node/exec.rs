@@ -22,29 +22,21 @@ pub struct Exec<F> {
 	executor: F,
 }
 
-impl<F> Exec<F> {
+const impl<F> Exec<F> {
 	#[inline(always)]
-	pub const fn new(executor: F) -> Self {
+	pub fn new(executor: F) -> Self {
 		Self { executor }
 	}
 }
 
-impl<F> Default for Exec<F>
+const impl<F> Default for Exec<F>
 where
-	F: Default,
+	F: [const] Default,
 {
 	#[inline(always)]
 	fn default() -> Self {
 		Self::new(F::default())
 	}
-}
-
-#[cfg(feature = "const")]
-impl<F> const_default::ConstDefault for Exec<F>
-where
-	F: const_default::ConstDefault,
-{
-	const DEFAULT: Self = Self::new(F::DEFAULT);
 }
 
 impl<F> NodeMetadata for Exec<F> {
@@ -61,7 +53,7 @@ where
 	#[inline(always)]
 	fn execute(&self, ctx: &mut Ctx, input: &mut Input<Source>, stack: Stack) -> Result<(), DispatchError<Stack>> {
 		if let Some(tokens) = input.remaining_tokens() {
-			return Err(DispatchError::Fatal(CommandError::TrailingInput(tokens.join(" "))));
+			return Err(DispatchError::Fatal(CommandError::TrailingInput(tokens.into_iter().intersperse(" ").collect::<String>())));
 		}
 
 		self.executor.run(ctx, stack).map_err(IntoDispatchError::into_fatal) // IntoDispatchError has a specialization for CommandError to not box it again

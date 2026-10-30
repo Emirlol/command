@@ -24,23 +24,21 @@ pub struct LiteralAliases<const NAMES: &'static [&'static str], Children, const 
 	children: Children,
 }
 
-impl<const NAMES: &'static [&'static str], Children, const DESCRIPTION: &'static str> LiteralAliases<NAMES, Children, DESCRIPTION> {
+const impl<const NAMES: &'static [&'static str], Children, const DESCRIPTION: &'static str> LiteralAliases<NAMES, Children, DESCRIPTION> {
 	#[inline(always)]
-	pub const fn new(children: Children) -> Self {
+	pub fn new(children: Children) -> Self {
 		Self { children }
 	}
 }
 
-impl<const NAMES: &'static [&'static str], Children: Default, const DESCRIPTION: &'static str> Default for LiteralAliases<NAMES, Children, DESCRIPTION> {
+const impl<const NAMES: &'static [&'static str], Children, const DESCRIPTION: &'static str> Default for LiteralAliases<NAMES, Children, DESCRIPTION>
+where
+	Children: [const] Default,
+{
 	#[inline(always)]
 	fn default() -> Self {
 		Self::new(Children::default())
 	}
-}
-
-#[cfg(feature = "const")]
-impl<const NAMES: &'static [&'static str], Children: const_default::ConstDefault, const DESCRIPTION: &'static str> const_default::ConstDefault for LiteralAliases<NAMES, Children, DESCRIPTION> {
-	const DEFAULT: Self = Self::new(Children::DEFAULT);
 }
 
 impl<const NAMES: &'static [&'static str], Children, const DESCRIPTION: &'static str> WriteNode for LiteralAliases<NAMES, Children, DESCRIPTION> {
@@ -62,7 +60,7 @@ where
 	#[inline(always)]
 	fn execute(&self, ctx: &mut Ctx, input: &mut Input<Source>, stack: Stack) -> Result<(), DispatchError<Stack>> {
 		match input.peek() {
-			Some(token) if NAMES.iter().any(|name| token == *name) => {
+			Some(ref token) if NAMES.contains(token) => {
 				input.advance(1);
 				self.children.execute(ctx, input, stack).map_err(|e| e.into_fatal(input))
 			}
@@ -87,7 +85,7 @@ where
 	#[inline(always)]
 	fn inspect(&self, inspector: &mut NodeInspector, input: &mut Input<Source>) -> Result<(), InspectionError> {
 		match input.peek() {
-			Some(token) if NAMES.iter().any(|name| token == *name) => {
+			Some(ref token) if NAMES.contains(token) => {
 				input.advance(1);
 				inspector.inspect::<Self>()?;
 

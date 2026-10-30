@@ -1,28 +1,33 @@
 #![allow(incomplete_features)]
-#![feature(adt_const_params, unsized_const_params, min_specialization, const_default, const_trait_impl)]
+#![feature(
+	adt_const_params,
+	unsized_const_params,
+	min_specialization,
+	const_default,
+	const_trait_impl,
+	const_convert,
+	const_iter,
+	const_option_ops,
+	const_index,
+	iter_intersperse
+)]
 //! Statically-typed command tree library.
 
 extern crate self as command;
 
 mod args;
-mod error;
-mod execute;
-mod input;
-mod inspect;
-mod metadata;
-mod node;
-
-// Re-export for the macro to work without requiring the dependency on the consumer crates
-#[cfg(feature = "const")]
-pub mod const_default {
-	pub use const_default::ConstDefault;
-}
-
 pub use args::*;
+mod error;
 pub use error::*;
+mod execute;
 pub use execute::*;
+mod input;
+
 pub use input::*;
+mod inspect;
 pub use inspect::*;
 pub use macros::command;
+mod metadata;
 pub use metadata::*;
+mod node;
 pub use node::*;

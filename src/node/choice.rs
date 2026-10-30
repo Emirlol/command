@@ -22,35 +22,26 @@ pub struct Choice<Head, Tail> {
 	tail: Tail,
 }
 
-impl<Head, Tail> Choice<Head, Tail>
+const impl<Head, Tail> Choice<Head, Tail>
 where
 	Head: NodeMetadata,
 	Tail: NodeMetadata,
 {
 	#[inline(always)]
-	pub const fn new(head: Head, tail: Tail) -> Self {
+	pub fn new(head: Head, tail: Tail) -> Self {
 		Self { head, tail }
 	}
 }
 
-impl<Head, Tail> Default for Choice<Head, Tail>
+const impl<Head, Tail> Default for Choice<Head, Tail>
 where
-	Head: Default + NodeMetadata,
-	Tail: Default + NodeMetadata,
+	Head: [const] Default + NodeMetadata,
+	Tail: [const] Default + NodeMetadata,
 {
 	#[inline(always)]
 	fn default() -> Self {
 		Self::new(Head::default(), Tail::default())
 	}
-}
-
-#[cfg(feature = "const")]
-impl<Head, Tail> const_default::ConstDefault for Choice<Head, Tail>
-where
-	Head: const_default::ConstDefault + NodeMetadata,
-	Tail: const_default::ConstDefault + NodeMetadata,
-{
-	const DEFAULT: Self = Self::new(Head::DEFAULT, Tail::DEFAULT);
 }
 
 impl<Head, Tail> NodeMetadata for Choice<Head, Tail>
